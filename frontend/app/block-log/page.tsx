@@ -1,7 +1,10 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
+import { MetricCard } from "@/components/ui/metric-card";
+import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { SectionTitle } from "@/components/ui/section-title";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { blockEvents, blockLogMetrics, selectedEvent } from "@/lib/mock-data";
 
 const BlockLogPage = () => {
@@ -15,10 +18,7 @@ const BlockLogPage = () => {
       />
       <div className="grid gap-4 md:grid-cols-4">
         {blockLogMetrics.map((metric) => (
-          <GlassCard key={metric.label} className="p-4">
-            <p className="text-xs text-shield-muted">{metric.label}</p>
-            <p className="mt-2 text-2xl font-bold text-white">{metric.value}</p>
-          </GlassCard>
+          <MetricCard key={metric.label} metric={metric} />
         ))}
       </div>
 
@@ -39,20 +39,12 @@ const BlockLogPage = () => {
               <div
                 key={`${event.time}-${event.session}`}
                 className="grid grid-cols-[1fr_1fr_1fr] border-b border-white/10 p-4 text-sm last:border-b-0"
-              >
-                <span className="text-white">{event.attackType}</span>
-                <span className="text-shield-muted">{event.session}</span>
-                <span
-                  className={
-                    event.verdict === "BLOCKED"
-                      ? "text-shield-blocked"
-                      : "text-shield-safe"
-                  }
                 >
-                  {event.verdict.toLowerCase()}
-                </span>
-              </div>
-            ))}
+                  <span className="text-white">{event.attackType}</span>
+                  <span className="text-shield-muted">{event.session}</span>
+                  <StatusBadge verdict={event.verdict} className="w-fit" />
+                </div>
+              ))}
           </div>
         </GlassCard>
 
@@ -68,11 +60,11 @@ const BlockLogPage = () => {
           </GlassCard>
           <GlassCard>
             <SectionTitle title="Chunk Trace" />
-            <div className="h-40 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+            <PlaceholderPanel className="h-40" />
           </GlassCard>
           <GlassCard>
             <SectionTitle title="Guard Decision Timeline" />
-            <div className="h-24 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+            <PlaceholderPanel className="h-24" />
           </GlassCard>
         </div>
       </div>

@@ -1,7 +1,14 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
+import { MetricCard } from "@/components/ui/metric-card";
+import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { SectionTitle } from "@/components/ui/section-title";
+import {
+  GuardDecisionRow,
+  StreamInputRow,
+  UpstreamRow,
+} from "@/components/ui/stream-row";
 import { dashboardMetrics, streamRows } from "@/lib/mock-data";
 
 const DemoPage = () => {
@@ -15,10 +22,7 @@ const DemoPage = () => {
       />
       <div className="grid gap-4 md:grid-cols-4">
         {dashboardMetrics.map((metric) => (
-          <GlassCard key={metric.label} className="p-4">
-            <p className="text-xs text-shield-muted">{metric.label}</p>
-            <p className="mt-2 text-2xl font-bold text-white">{metric.value}</p>
-          </GlassCard>
+          <MetricCard key={metric.label} metric={metric} />
         ))}
       </div>
 
@@ -30,9 +34,7 @@ const DemoPage = () => {
           />
           <div className="space-y-3 font-mono text-sm text-shield-muted">
             {streamRows.slice(0, 3).map((row) => (
-              <div key={`${row.time}-${row.input}`} className="rounded-xl bg-white/[0.03] p-3">
-                {row.time} {row.input}
-              </div>
+              <StreamInputRow key={`${row.time}-${row.input}`} row={row} />
             ))}
           </div>
         </GlassCard>
@@ -44,18 +46,7 @@ const DemoPage = () => {
           />
           <div className="space-y-3 font-mono text-sm">
             {streamRows.slice(0, 3).map((row) => (
-              <div
-                key={`${row.verdict}-${row.score}`}
-                className={
-                  row.verdict === "BLOCKED"
-                    ? "rounded-xl border border-shield-blocked/20 bg-shield-blocked/10 p-3 text-shield-blocked"
-                    : row.verdict === "HOLD"
-                      ? "rounded-xl border border-shield-hold/20 bg-shield-hold/10 p-3 text-shield-hold"
-                      : "rounded-xl border border-shield-safe/20 bg-shield-safe/10 p-3 text-shield-safe"
-                }
-              >
-                {row.verdict} {row.score.toFixed(2)} {row.guardNote}
-              </div>
+              <GuardDecisionRow key={`${row.verdict}-${row.score}`} row={row} />
             ))}
           </div>
         </GlassCard>
@@ -67,16 +58,7 @@ const DemoPage = () => {
           />
           <div className="space-y-3 font-mono text-sm text-shield-muted">
             {streamRows.slice(0, 3).map((row) => (
-              <div
-                key={`${row.upstream}-${row.input}`}
-                className={
-                  row.upstream === "not forwarded"
-                    ? "rounded-xl border border-shield-blocked/20 bg-shield-blocked/10 p-3 font-semibold text-shield-blocked"
-                    : "rounded-xl bg-white/[0.03] p-3"
-                }
-              >
-                {row.upstream}
-              </div>
+              <UpstreamRow key={`${row.upstream}-${row.input}`} row={row} />
             ))}
           </div>
         </GlassCard>
@@ -85,11 +67,11 @@ const DemoPage = () => {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <GlassCard>
           <SectionTitle title="Attack Playground" description="Scenario launch area." />
-          <div className="h-28 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-28" />
         </GlassCard>
         <GlassCard>
           <SectionTitle title="Block Log" description="Recent guard events." />
-          <div className="h-28 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-28" />
         </GlassCard>
       </div>
     </AppShell>

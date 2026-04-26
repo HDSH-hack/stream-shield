@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Zap } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { CompactStreamRow } from "@/components/ui/stream-row";
 import { streamRows } from "@/lib/mock-data";
 
 const Home = () => {
@@ -46,24 +47,7 @@ const Home = () => {
           </div>
           <div className="space-y-3 font-mono text-sm">
             {streamRows.slice(0, 4).map((row) => (
-              <div
-                key={`${row.input}-${row.score}`}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
-              >
-                <span className="truncate text-slate-200">{row.input}</span>
-                <span
-                  className={
-                    row.verdict === "BLOCKED"
-                      ? "text-shield-blocked"
-                      : row.verdict === "HOLD"
-                        ? "text-shield-hold"
-                        : "text-shield-safe"
-                  }
-                >
-                  {row.verdict} {row.score.toFixed(2)}
-                </span>
-                <span className="text-shield-muted">{row.upstream}</span>
-              </div>
+              <CompactStreamRow key={`${row.input}-${row.score}`} row={row} />
             ))}
           </div>
           <div className="mt-5 rounded-2xl border border-shield-blocked/30 bg-shield-blocked/10 px-4 py-3 text-sm font-semibold text-shield-blocked">

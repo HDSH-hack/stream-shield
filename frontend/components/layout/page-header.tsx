@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { StatusPill } from "@/components/ui/status-pill";
 
 type PageHeaderProps = {
   eyebrow: string;
@@ -34,9 +35,7 @@ export const PageHeader = ({
         ) : null}
       </div>
       {status ? (
-        <div className="inline-flex w-fit rounded-full border border-shield-safe/20 bg-shield-safe/10 px-3 py-1.5 text-xs font-medium text-shield-safe">
-          {status}
-        </div>
+        <StatusPill tone="safe">{status}</StatusPill>
       ) : null}
     </div>
   );

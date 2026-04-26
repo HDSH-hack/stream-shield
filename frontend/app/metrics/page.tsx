@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
+import { MetricCard } from "@/components/ui/metric-card";
+import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { SectionTitle } from "@/components/ui/section-title";
 import { metricsCards, modelSummary } from "@/lib/mock-data";
 
@@ -15,33 +17,29 @@ const MetricsPage = () => {
       />
       <div className="grid gap-4 md:grid-cols-4">
         {metricsCards.map((metric) => (
-          <GlassCard key={metric.label} className="p-4">
-            <p className="text-xs text-shield-muted">{metric.label}</p>
-            <p className="mt-2 text-2xl font-bold text-white">{metric.value}</p>
-            <p className="mt-1 text-xs text-shield-muted">{metric.note}</p>
-          </GlassCard>
+          <MetricCard key={metric.label} metric={metric} />
         ))}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
         <GlassCard className="min-h-80">
           <SectionTitle title="Detection Performance Over Time" />
-          <div className="h-56 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-56" />
         </GlassCard>
         <GlassCard className="min-h-80">
           <SectionTitle title="Latency Distribution" />
-          <div className="h-56 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-56" />
         </GlassCard>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <GlassCard>
           <SectionTitle title="Attack Categories" />
-          <div className="h-40 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-40" />
         </GlassCard>
         <GlassCard>
           <SectionTitle title="Traffic Breakdown" />
-          <div className="h-40 rounded-xl border border-dashed border-white/15 bg-white/[0.02]" />
+          <PlaceholderPanel className="h-40" />
         </GlassCard>
         <GlassCard>
           <SectionTitle title="Model Summary" />

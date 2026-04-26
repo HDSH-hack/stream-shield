@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Activity, Github, ShieldCheck } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { StatusPill } from "@/components/ui/status-pill";
 
 const navItems = [
   { href: "/demo", label: "Demo" },
@@ -57,10 +58,10 @@ export const TopNav = () => {
         </nav>
 
         <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded-full border border-shield-safe/20 bg-shield-safe/10 px-3 py-1.5 text-xs font-medium text-shield-safe sm:flex">
+          <StatusPill tone="safe" className="hidden sm:flex">
             <Activity size={13} />
             Demo ready
-          </div>
+          </StatusPill>
           <a
             href="https://github.com"
             aria-label="GitHub"
