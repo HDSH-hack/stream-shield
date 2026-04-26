@@ -16,14 +16,14 @@ rules:
     - "계좌.*번호"
     - "routing.*number"
     - "swift.*code"
-  block_external_dest:
-    - "@gmail.com"
-    - "@outlook.com"
-    - "@yahoo.com"
-    - "@protonmail.com"
-    - "attacker.*"
 
 domain:
+  block_external_dest:
+    - "@gmail\\.com"
+    - "@outlook\\.com"
+    - "@yahoo\\.com"
+    - "@protonmail\\.com"
+    - "attacker\\."
   pii_categories: ["SSN", "CARD_NUMBER", "CVV", "ACCOUNT", "주민등록번호", "계좌번호", "카드번호"]
   pci_strict: true
 

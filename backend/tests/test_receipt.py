@@ -56,5 +56,27 @@ class ReceiptTest(unittest.TestCase):
         self.assertTrue(ok, msg)
 
 
+class ReceiptCliTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        rl = ReceiptLog(self.dir / "r.log", signing_key_path=self.dir / "k.pem")
+        for i in range(2):
+            rl.append({"action": "BLOCK", "i": i})
+        (self.dir / "pub.pem").write_bytes(rl.public_key_pem())
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_verify_cli_ok(self):
+        from stream_shield.receipt import _cli
+        rc = _cli(["verify", str(self.dir / "r.log"), "--pubkey", str(self.dir / "pub.pem")])
+        self.assertEqual(rc, 0)
+
+    def test_inspect_cli_ok(self):
+        from stream_shield.receipt import _cli
+        rc = _cli(["inspect", str(self.dir / "r.log")])
+        self.assertEqual(rc, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

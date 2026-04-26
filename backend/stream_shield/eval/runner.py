@@ -35,8 +35,11 @@ Classifier = Callable[[str, Policy], tuple[Action, float]]
 def l0_only_classifier(text: str, policy: Policy) -> tuple[Action, float]:
     """Regex-only stand-in for the real L0+L1 cascade.
 
-    Returns BLOCK with score 1.0 on any block_phrase / role_spoof_regex hit,
-    otherwise ALLOW with 0.0. Replace once `guard/engine.py` is wired.
+    Returns BLOCK with score 1.0 on any of:
+      - block_phrases / role_spoof_regex match (instruction-style attacks)
+      - block_external_dest match against the *raw* text (PII exfil destinations)
+
+    Otherwise ALLOW with 0.0. Replace once `guard/engine.py` is wired.
     """
     norm = normalize(text)
     for pattern in policy.block_phrases:
@@ -44,6 +47,12 @@ def l0_only_classifier(text: str, policy: Policy) -> tuple[Action, float]:
             return Action.BLOCK, 1.0
     for pattern in policy.role_spoof_regex:
         if re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE):
+            return Action.BLOCK, 1.0
+    for pattern in policy.block_external_dest:
+        # Match against the original text (not normalized) so domains like
+        # "@Gmail.com" or "attacker.com" stay intact. IGNORECASE handles the
+        # case-variation; users can write @gmail.com once and catch both.
+        if re.search(pattern, text, flags=re.IGNORECASE):
             return Action.BLOCK, 1.0
     return Action.ALLOW, 0.0
 
