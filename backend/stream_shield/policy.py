@@ -12,6 +12,25 @@ import yaml
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
+def _merge(parent: Any, child: Any) -> Any:
+    if isinstance(parent, dict) and isinstance(child, dict):
+        out = dict(parent)
+        for k, v in child.items():
+            out[k] = _merge(parent.get(k), v) if k in parent else v
+        return out
+    if isinstance(parent, list) and isinstance(child, list):
+        seen = set()
+        out: list[Any] = []
+        for item in [*parent, *child]:
+            key = item if isinstance(item, (str, int, float, bool)) else repr(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+        return out
+    return child
+
+
 @dataclass
 class Thresholds:
     safe: float = 0.35
@@ -56,24 +75,17 @@ def load_policy(policy_id: str = "default") -> Policy:
         path = CONFIG_DIR / "policy.default.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 
-    # Merge with parent if `extends` set: load parent raw YAML, then child overrides per top-level key.
+    # Merge with parent if `extends` set.
+    # Semantics:
+    #   - dict + dict      → recursive merge
+    #   - list + list      → concat with order-preserving dedupe (extends *adds* rules)
+    #   - scalar override  → child wins
     if "extends" in raw:
         parent_path = CONFIG_DIR / f"policy.{raw['extends']}.yaml"
         if parent_path.exists():
             parent_raw = yaml.safe_load(parent_path.read_text(encoding="utf-8")) or {}
-            merged: dict[str, Any] = {}
-            for k, v in parent_raw.items():
-                merged[k] = v
-            for k, v in raw.items():
-                if k == "extends":
-                    continue
-                if isinstance(v, dict) and isinstance(merged.get(k), dict):
-                    nested = dict(merged[k])
-                    nested.update(v)
-                    merged[k] = nested
-                else:
-                    merged[k] = v
-            raw = merged
+            child = {k: v for k, v in raw.items() if k != "extends"}
+            raw = _merge(parent_raw, child)
 
     p = Policy(policy_id=raw.get("policy_id", policy_id))
     if "thresholds" in raw:
