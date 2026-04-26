@@ -86,10 +86,18 @@ async def shield_ws(
                 "session_id": session_id,
                 "policy_id": policy_id,
             })
-            await asyncio.gather(
-                _handle_client(ws, session, buffer_mgr),
-                _handle_gemini(ws, session, buffer_mgr),
+            client_task = asyncio.create_task(_handle_client(ws, session, buffer_mgr))
+            gemini_task = asyncio.create_task(_handle_gemini(ws, session, buffer_mgr))
+            done, pending = await asyncio.wait(
+                {client_task, gemini_task},
+                return_when=asyncio.FIRST_COMPLETED,
             )
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()
     except WebSocketDisconnect:
         logger.info("client disconnected: %s", session_id)
     except Exception as e:

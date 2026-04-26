@@ -166,6 +166,7 @@ const PlaygroundPage = () => {
         detail: `${size} bytes`,
         tone: "neutral",
       });
+      scheduleBackendReconnect(900);
     };
 
     socket.onerror = () => {
