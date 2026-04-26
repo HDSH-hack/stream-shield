@@ -50,7 +50,15 @@ class L1Classifier:
 
         logger.info("loading L1 model: %s", self.model_id)
         self._tok = AutoTokenizer.from_pretrained(self.model_id)
-        self._mdl = AutoModelForSequenceClassification.from_pretrained(self.model_id)
+        # low_cpu_mem_usage=False forces eager weight loading. Without this,
+        # newer transformers leave the classifier head on the 'meta' device,
+        # causing 'Tensor on device meta is not on the expected device cpu!'
+        # at inference time.
+        self._mdl = AutoModelForSequenceClassification.from_pretrained(
+            self.model_id,
+            low_cpu_mem_usage=False,
+        )
+        self._mdl.to("cpu")
         self._mdl.eval()
 
         id2label = self._mdl.config.id2label
