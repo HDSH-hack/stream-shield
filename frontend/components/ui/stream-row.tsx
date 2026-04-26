@@ -9,8 +9,9 @@ type StreamInputRowProps = {
 
 export const StreamInputRow = ({ row }: StreamInputRowProps) => {
   return (
-    <div className="rounded-xl bg-white/[0.03] p-3">
-      {row.time} {row.input}
+    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <span className="mr-3 text-[11px] text-shield-muted">{row.time}</span>
+      <span>{row.input}</span>
     </div>
   );
 };
@@ -28,8 +29,8 @@ export const UpstreamRow = ({ row }: StreamInputRowProps) => {
     <div
       className={
         row.upstream === "not forwarded"
-          ? "rounded-xl border border-shield-blocked/20 bg-shield-blocked/10 p-3 font-semibold text-shield-blocked"
-          : "rounded-xl bg-white/[0.03] p-3"
+          ? "rounded-xl border border-shield-blocked/25 bg-shield-blocked/10 p-3 font-semibold text-shield-blocked shadow-[0_0_22px_rgba(251,113,133,0.08)]"
+          : "rounded-xl border border-white/10 bg-white/[0.035] p-3"
       }
     >
       {row.upstream}
@@ -39,7 +40,7 @@ export const UpstreamRow = ({ row }: StreamInputRowProps) => {
 
 export const CompactStreamRow = ({ row }: StreamInputRowProps) => {
   return (
-    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <span className="truncate text-slate-200">{row.input}</span>
       <span className={verdictTextClass[row.verdict]}>
         {row.verdict} {row.score.toFixed(2)}
