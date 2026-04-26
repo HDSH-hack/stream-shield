@@ -17,7 +17,12 @@ import base64
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Annotated
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Path
 from fastapi.middleware.cors import CORSMiddleware
