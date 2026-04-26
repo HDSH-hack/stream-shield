@@ -43,22 +43,12 @@ export type ShieldModelResponseEvent = {
   final?: boolean;
 };
 
-export type ShieldAudioResponseEvent = {
-  type: "response_audio";
-  seq?: number;
-  mimeType?: string;
-  format?: string;
-  data?: string;
-  final?: boolean;
-};
-
 export type ShieldServerEvent =
   | ShieldDecisionEvent
   | ShieldSessionStartedEvent
   | ShieldErrorEvent
   | ShieldTranscriptEvent
-  | ShieldModelResponseEvent
-  | ShieldAudioResponseEvent;
+  | ShieldModelResponseEvent;
 
 export type ShieldAudioChunkMessage = {
   type: "realtimeInput.audio";
@@ -87,8 +77,7 @@ export const parseShieldEvent = (raw: string): ShieldServerEvent | null => {
       parsed.type === "transcript" ||
       parsed.type === "input_transcript" ||
       parsed.type === "model_response" ||
-      parsed.type === "response_text" ||
-      parsed.type === "response_audio"
+      parsed.type === "response_text"
     ) {
       return parsed as ShieldServerEvent;
     }

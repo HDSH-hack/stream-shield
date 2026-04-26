@@ -260,20 +260,14 @@ class ResponseBuffer:
         if self.state == "BUFFERING":
             self.queue.append(chunk)
         elif self.state == "FLUSHING":
-            await self.client_ws.send_json({
-                "type": "response_audio",
-                "data": base64.b64encode(chunk).decode("ascii"),
-            })
+            await self.client_ws.send_bytes(chunk)
         # DROPPED → 그대로 폐기
 
     async def on_verdict(self, verdict):
         if verdict.score < self.policy.block_threshold:
-            # safe → 누적분 flush 후 JSON response_audio 중계 모드
+            # safe → 누적분 flush 후 binary audio 중계 모드
             for chunk in self.queue:
-                await self.client_ws.send_json({
-                    "type": "response_audio",
-                    "data": base64.b64encode(chunk).decode("ascii"),
-                })
+                await self.client_ws.send_bytes(chunk)
             self.queue.clear()
             self.state = "FLUSHING"
         else:
@@ -358,7 +352,7 @@ receipt:
 
 // LLM response
 { "type": "response_text", "delta": "회의를 추가했어요" }
-{ "type": "response_audio", "format": "pcm_s24le_24k", "data": "<base64>" }
+<binary audio frame>
 
 // blocked
 { "type": "blocked", "category": "prompt_injection", "score": 0.92,
@@ -375,7 +369,7 @@ receipt:
 ### 4.1 스택
 - **Next.js App Router + React** (TypeScript). Vercel 호스팅.
 - **Web Audio API** + AudioWorklet — 16kHz PCM mono, 200–500ms 청크.
-- **WebSocket client** — JSON event stream. Audio chunks are base64 PCM16.
+- **WebSocket client** — JSON control/events + binary audio response frames.
 - **shadcn/ui** + Tailwind — 빠른 UI.
 
 ### 4.2 페이지 구조 (Gihwang's mockups: `design-gihwang/page-home.png`, `page-dashboard.png`)
@@ -628,7 +622,7 @@ async def run_evaluation():
 ### Phase 2 (3–5h) — Frontend + 통합
 - Home 페이지 (Start 버튼, mic permission).
 - Dashboard 페이지 (3 pane).
-- WebSocket client (JSON event stream with base64 PCM16 audio).
+- WebSocket client (JSON control/events + binary audio response frames).
 - TTS audio playback.
 - Mock data 로 Dashboard 단독 동작 → 실제 backend 연결.
 

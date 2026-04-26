@@ -172,20 +172,6 @@ const PlaygroundPage = () => {
       });
       return;
     }
-
-    if (event.type === "response_audio") {
-      const byteEstimate = event.data
-        ? Math.round((event.data.length * 3) / 4)
-        : 0;
-      pushBackendEvent({
-        label: event.final ? "audio complete" : "audio response",
-        detail:
-          byteEstimate > 0
-            ? `${byteEstimate} bytes · ${event.mimeType ?? event.format ?? "audio"}`
-            : event.mimeType ?? event.format ?? "audio chunk",
-        tone: "neutral",
-      });
-    }
   };
 
   const requestMicrophone = async () => {

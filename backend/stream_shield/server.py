@@ -127,18 +127,12 @@ async def _handle_client(ws, session: ShieldSession, buffer_mgr: BufferManager):
             # JSON base64 audio → decode → forward to Gemini
             b64 = data.get("data", "")
             if b64:
-                try:
-                    pcm = base64.b64decode(b64)
-                except Exception:
-                    await ws.send_json({
-                        "type": "error",
-                        "message": "invalid base64 audio chunk",
-                    })
-                    continue
-
-                mime_type = data.get("mimeType") or "audio/pcm;rate=16000"
+                pcm = base64.b64decode(b64)
                 await session.upstream.send_realtime_input(
-                    audio=types.Blob(mime_type=mime_type, data=pcm),
+                    audio=types.Blob(
+                        mime_type="audio/pcm;rate=16000",
+                        data=pcm,
+                    ),
                 )
 
 
@@ -239,14 +233,7 @@ async def _handle_gemini(ws, session: ShieldSession, buffer_mgr: BufferManager):
                         "final": False,
                     })
                 if part.inline_data and part.inline_data.data:
-                    audio_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
-                    await ws.send_json({
-                        "type": "response_audio",
-                        "seq": session.next_seq(),
-                        "mimeType": getattr(part.inline_data, "mime_type", None),
-                        "data": audio_b64,
-                        "final": False,
-                    })
+                    await ws.send_bytes(part.inline_data.data)
 
         # --- Phase 2: response turnComplete ---
         if sc.turn_complete and session.state == SessionState.SAFE:

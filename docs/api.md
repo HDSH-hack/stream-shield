@@ -22,9 +22,9 @@ ws://127.0.0.1:8000/ws/demo-session?policy=default
 ```
 
 Backend should accept one WebSocket connection per active browser mic stream.
-The frontend currently sends JSON messages only, including audio chunks as
-base64 encoded PCM. Backend should also broadcast audio responses as JSON
-`response_audio` events instead of binary frames for the demo UI.
+The frontend sends JSON messages for control/events and base64-encoded input
+audio chunks. Backend may send Gemini audio responses as binary WebSocket
+frames.
 
 ## Frontend -> Backend
 
@@ -76,6 +76,11 @@ Expected backend behavior:
 ## Backend -> Frontend
 
 Frontend accepts these event types. Unknown event types are ignored.
+
+Backend response uses two frame classes:
+
+- JSON text frames for session/control/guard/transcript/model text events.
+- Binary frames for Gemini audio response bytes.
 
 ### Session Started Event
 
@@ -220,32 +225,11 @@ Example:
 }
 ```
 
-### Audio Response Event
+### Binary Audio Response Frame
 
-Used when Gemini Live emits an audio part. The backend base64-encodes the audio
-so the frontend event stream remains JSON-only.
-
-```ts
-type ShieldAudioResponseEvent = {
-  type: "response_audio";
-  seq?: number;
-  mimeType?: string;
-  data?: string;
-  final?: boolean;
-};
-```
-
-Example:
-
-```json
-{
-  "type": "response_audio",
-  "seq": 23,
-  "mimeType": "audio/pcm;rate=24000",
-  "data": "AAABAAIA...",
-  "final": false
-}
-```
+When Gemini Live emits an audio part, backend forwards the raw audio bytes as a
+binary WebSocket frame. The current frontend displays receipt of those bytes in
+the event log. Playback can be added later on top of the same frame path.
 
 ## Connection Lifecycle
 
@@ -282,13 +266,12 @@ Timeout / fallback:
 - [ ] Broadcast `error` for recoverable setup or protocol failures.
 - [ ] Broadcast `transcript` or `input_transcript`.
 - [ ] Broadcast `model_response` or `response_text`.
-- [ ] Broadcast `response_audio` for Gemini audio chunks.
+- [ ] Broadcast Gemini audio chunks as binary WebSocket frames.
 - [ ] Broadcast `decision` or `blocked`.
 - [ ] Keep `seq` aligned where possible for UI correlation.
 
 ## Open Questions
 
-- Whether final backend prefers JSON base64 audio or binary WebSocket frames.
 - Whether `policy` should stay in query string or move into an initial session
   message.
 - Whether Gemini Live response events should include richer metadata such as
