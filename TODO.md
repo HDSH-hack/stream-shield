@@ -8,7 +8,7 @@
 | 사람 | 핵심 영역 | 주요 모듈 |
 |---|---|---|
 | **Eunjin (@foura1201)** | Backend core | `server.py`, `buffer/manager.py`, `guard/classifier.py`, `protocol.py`, `gemini.py` |
-| **Gihwang (@hangole1999)** | Frontend + parallel pipeline | `frontend/src/**`, `buffer/response_buffer.py` (parallel), 다이어그램 / mockup |
+| **Gihwang (@hangole1999)** | Frontend + parallel pipeline | `frontend/app/**`, `frontend/components/**`, `buffer/response_buffer.py` (parallel), 다이어그램 / mockup |
 | **Dohoon (@DoHoonKim8)** | Guard tiered cascade + eval | `guard/rules.py`, `guard/normalizer.py`, `guard/llm_judge.py`, `policy.py`, `eval/runner.py`, attackset 확장 |
 | **Soowon (@swjng)** | Comparison + per-entity + receipt | `config/policy.*.yaml` (entity 정책), `receipt.py`, `metrics.py`, eval 분석 |
 
@@ -22,7 +22,7 @@
 |---|---|---|
 | Backend 환경 세팅 (uv + venv + requirements 설치) | Eunjin | `backend/.venv` 동작 |
 | Gemini Live raw WS PoC — auto VAD + inputTranscription | Eunjin | `backend/notebooks/gemini_live_poc.ipynb` 결과: transcript 와 modelTurn 도착 타이밍 표 |
-| Frontend 환경 세팅 (Vite + React + WebSocket client) | Gihwang | `pnpm dev` 동작 (빈 화면 OK) |
+| Frontend 환경 세팅 (Next.js App Router + React + WebSocket client) | Gihwang | `pnpm dev` 동작 (빈 화면 OK) |
 | Mic capture PoC (AudioWorklet 16kHz PCM 청크) | Gihwang | brower console 에 청크 byte 길이 로그 |
 | Prompt Guard 2 / ProtectAI / DeBERTa-small 벤치마크 | Dohoon | `notebooks/promptguard_benchmark.ipynb` 결과: 4 모델 × recall / latency 표, 1 차 모델 선정 |
 | 4명 contributor doc 통합 README + repo 정리 | Soowon | (이 TODO 작성 + doc 정리, ✅ 완료) |
@@ -51,10 +51,10 @@
 
 | 작업 | 담당 | 산출물 |
 |---|---|---|
-| Home page (mic permission + Start 버튼 + policy picker) | Gihwang | `pages/Home.tsx` |
-| Dashboard 3-pane (transcript / decision / metrics) | Gihwang | `pages/Dashboard.tsx` + components |
-| WebSocket client (binary audio + JSON control) | Gihwang | `api/ws.ts` |
-| TTS audio playback (modelTurn audio 청크) | Gihwang | `audio/player.ts` |
+| Home page (mic permission + Start 버튼 + policy picker) | Gihwang | `app/page.tsx` |
+| Dashboard 3-pane (transcript / decision / metrics) | Gihwang | `app/demo/page.tsx` + components |
+| WebSocket client (binary audio + JSON control) | Gihwang | `lib/ws.ts` |
+| TTS audio playback (modelTurn audio 청크) | Gihwang | `lib/audio/player.ts` |
 | Backend 통합 테스트 (browser → proxy → Gemini → browser TTS) | Eunjin + Gihwang | end-to-end 정상 한 turn 동작 |
 | Decision broadcast (server → client decision events) | Eunjin | `protocol.py` 에 decision 이벤트 추가 |
 | Metrics logger | Soowon | `metrics.py` — recall / FPR / latency |

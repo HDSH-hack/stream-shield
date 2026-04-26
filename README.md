@@ -76,13 +76,16 @@ stream-shield/
 │   └── notebooks/
 │       ├── gemini_live_poc.ipynb        # phase 0 timing PoC
 │       └── promptguard_benchmark.ipynb  # model selection
-├── frontend/                    # Vite + React
-│   └── src/
-│       ├── pages/Home.tsx
-│       ├── pages/Dashboard.tsx
-│       ├── components/
-│       ├── audio/recorder.ts    # AudioWorklet PCM 16kHz
-│       └── api/ws.ts            # WebSocket client
+├── frontend/                    # Next.js App Router + React
+│   ├── app/
+│   │   ├── page.tsx             # /
+│   │   ├── demo/page.tsx        # /demo
+│   │   ├── playground/page.tsx  # /playground
+│   │   ├── metrics/page.tsx     # /metrics
+│   │   ├── block-log/page.tsx   # /block-log
+│   │   └── architecture/page.tsx # /architecture
+│   ├── components/
+│   └── lib/
 ├── sidecar/                     # (stretch) Ed25519 signing daemon
 └── docs/
     ├── api.md
@@ -111,7 +114,7 @@ pnpm install
 pnpm dev
 ```
 
-브라우저에서 `http://localhost:5173` 접속 → mic permission → demo.
+브라우저에서 `http://localhost:3000` 접속 → Stream Shield frontend demo.
 
 ### Eval / per-entity comparison
 

@@ -372,7 +372,7 @@ receipt:
 ## 4. Frontend architecture
 
 ### 4.1 스택
-- **Vite + React** (TypeScript). Vercel 정적 호스팅.
+- **Next.js App Router + React** (TypeScript). Vercel 호스팅.
 - **Web Audio API** + AudioWorklet — 16kHz PCM mono, 200–500ms 청크.
 - **WebSocket client** — binary audio + JSON control 두 채널.
 - **shadcn/ui** + Tailwind — 빠른 UI.
@@ -412,28 +412,28 @@ receipt:
 
 ```
 frontend/
-├── index.html
-├── vite.config.ts
+├── next.config.mjs
 ├── package.json
-├── src/
-│   ├── main.tsx
-│   ├── App.tsx
-│   ├── pages/
-│   │   ├── Home.tsx                # /
-│   │   └── Dashboard.tsx           # /dashboard
-│   ├── components/
-│   │   ├── TranscriptPane.tsx
-│   │   ├── DecisionPane.tsx
-│   │   ├── ReceiptFeed.tsx
-│   │   ├── MetricsCard.tsx
-│   │   └── PolicyPicker.tsx
-│   ├── audio/
-│   │   ├── recorder.ts             # Web Audio API + AudioWorklet
-│   │   └── player.ts               # TTS playback
-│   ├── api/
-│   │   └── ws.ts                   # WebSocket client
-│   └── store/
-│       └── session.ts              # zustand
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx                    # /
+│   ├── demo/page.tsx               # /demo
+│   ├── playground/page.tsx         # /playground
+│   ├── metrics/page.tsx            # /metrics
+│   ├── block-log/page.tsx          # /block-log
+│   └── architecture/page.tsx       # /architecture
+├── components/
+│   ├── transcript-pane.tsx
+│   ├── decision-pane.tsx
+│   ├── receipt-feed.tsx
+│   ├── metric-card.tsx
+│   └── policy-picker.tsx
+├── lib/
+│   ├── mock-data.ts
+│   ├── ws.ts                       # WebSocket client
+│   └── audio/
+│       ├── recorder.ts             # Web Audio API + AudioWorklet
+│       └── player.ts               # TTS playback
 └── public/
     └── shields-logo.svg
 ```
@@ -613,7 +613,7 @@ async def run_evaluation():
 
 ### Phase 0 (0–1h) — 환경 + Gemini Live PoC
 - Backend repo 셋업 (FastAPI + uvicorn + websockets).
-- Frontend repo 셋업 (Vite + React).
+- Frontend repo 셋업 (Next.js App Router + React).
 - Gemini Live API raw WS 연결 검증 (auto VAD + inputTranscription 타이밍 측정).
 - *Decision point*: transcript 가 modelTurn 보다 빠르게 / 동시에 도착하는가? 아니면 push-to-talk 모드로 전환?
 
@@ -683,8 +683,10 @@ stream-shield/                       # 별도 implementation repo (HDSH-hack 또
 │   └── tests/
 ├── frontend/                        # §4 코드 구조
 │   ├── package.json
-│   ├── vite.config.ts
-│   └── src/...
+│   ├── next.config.mjs
+│   ├── app/...
+│   ├── components/...
+│   └── lib/...
 ├── sidecar/                         # (stretch)
 └── docs/
     ├── architecture.md
@@ -702,7 +704,7 @@ gh repo create HDSH-hack/stream-shield --private --description "Streaming PI shi
 cd stream-shield
 # scaffold
 mkdir -p backend/stream_shield/{guard,buffer,eval} backend/{config,datasets,tests} sidecar
-mkdir -p frontend/src/{pages,components,audio,api,store}
+mkdir -p frontend/app/{demo,playground,metrics,block-log,architecture} frontend/{components,lib,public}
 mkdir -p docs/individual-contributions
 # add UNIFIED_DESIGN.md, README, configs, base files
 git init && git add -A && git commit -m "Initial scaffold from UNIFIED_DESIGN"

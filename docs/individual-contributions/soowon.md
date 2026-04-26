@@ -372,7 +372,7 @@ generic Gemini = *전 세계 한 정책*. 한 공격자가 한 번 우회 찾으
 
 ### 14.2 Frontend (브라우저)
 
-**스택**: Vanilla JS or Vite + React (hackathon 의 Vercel 제공 → 정적 호스팅 친화). 단순한 단일 페이지로 시작.
+**스택**: Next.js App Router + React (hackathon 의 Vercel 제공 → 배포 친화). 단순한 페이지부터 시작.
 
 **핵심 책임**:
 1. **Mic capture** — `getUserMedia({audio: {sampleRate: 16000, channelCount: 1, echoCancellation: true}})`. AudioWorklet 으로 *200–500ms PCM 청크* 추출 (Float32 → Int16 변환).
@@ -459,7 +459,7 @@ stream_shield/
 ### 14.5 Deployment 시나리오
 
 **A. Hackathon 데모 (가장 간단)**:
-- Frontend: Vercel 정적 호스팅 (단일 HTML/JS 또는 Vite 빌드).
+- Frontend: Vercel 호스팅 (Next.js 빌드).
 - Backend: GCP Compute Engine (e2-medium) 또는 로컬 ngrok tunnel — 단일 인스턴스로 충분.
 - Sidecar: 같은 VM 의 별 systemd unit.
 - SQLite: 로컬 파일.
