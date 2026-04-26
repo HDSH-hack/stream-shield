@@ -21,8 +21,6 @@ from stream_shield.guard.engine import GuardEngine
 from stream_shield.buffer.manager import BufferManager
 from stream_shield.policy import load_policy
 from stream_shield.session import ShieldSession
-from stream_shield.metrics import MetricsLogger
-
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Stream Shield", version="0.1.0")
@@ -56,37 +54,30 @@ async def shield_ws(
         await ws.close()
         return
 
-    try:
-        gemini = await connect_gemini(api_key=api_key, policy=policy)
-    except Exception as e:
-        logger.exception("gemini connect failed")
-        await ws.send_json({"type": "error", "message": f"gemini connect failed: {e}"})
-        await ws.close()
-        return
-
-    session = ShieldSession(
-        session_id=session_id,
-        upstream=gemini,
-        policy=policy,
-    )
-
     guard = GuardEngine(policy=policy)
     await guard.warmup()
     buffer_mgr = BufferManager(guard=guard, policy=policy)
-    metrics = MetricsLogger()
 
     try:
-        await asyncio.gather(
-            client_to_gemini(ws, session, buffer_mgr, metrics),
-            gemini_to_client(ws, session, buffer_mgr, metrics),
-        )
+        async with connect_gemini(api_key=api_key, policy=policy) as gemini:
+            session = ShieldSession(
+                session_id=session_id,
+                upstream=gemini,
+                policy=policy,
+            )
+            await asyncio.gather(
+                client_to_gemini(ws, session, buffer_mgr),
+                gemini_to_client(ws, session, buffer_mgr),
+            )
     except WebSocketDisconnect:
         logger.info("client disconnected")
-    finally:
-        await gemini.close()
+    except Exception as e:
+        logger.exception("session error")
+        await ws.send_json({"type": "error", "message": str(e)})
+        await ws.close()
 
 
-async def client_to_gemini(ws, session, buffer_mgr, metrics):
+async def client_to_gemini(ws, session, buffer_mgr):
     """Browser → backend → Gemini Live."""
     while True:
         msg = await ws.receive()
@@ -95,7 +86,7 @@ async def client_to_gemini(ws, session, buffer_mgr, metrics):
         ...
 
 
-async def gemini_to_client(ws, session, buffer_mgr, metrics):
+async def gemini_to_client(ws, session, buffer_mgr):
     """Gemini Live → backend → browser.
     Includes Response Buffer (~100ms delay) for parallel pipeline."""
     while True:
