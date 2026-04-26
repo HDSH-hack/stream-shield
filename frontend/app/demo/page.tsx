@@ -2,7 +2,6 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { MetricCard } from "@/components/ui/metric-card";
-import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { SectionTitle } from "@/components/ui/section-title";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -86,17 +85,17 @@ const DemoPage = () => {
           />
           <div className="grid grid-cols-4 gap-2 font-mono text-xs">
             {splitStreamChunks.map((chunk, index) => (
-                <div
-                  key={chunk}
-                  className={
-                    index === splitStreamChunks.length - 1
-                      ? "rounded-xl border border-shield-blocked/25 bg-shield-blocked/10 p-3 text-shield-blocked"
-                      : "rounded-xl border border-shield-cyan/20 bg-shield-cyan/5 p-3 text-shield-cyan"
-                  }
-                >
-                  {chunk}
-                </div>
-              ))}
+              <div
+                key={chunk}
+                className={
+                  index === splitStreamChunks.length - 1
+                    ? "rounded-xl border border-shield-blocked/25 bg-shield-blocked/10 p-3 text-shield-blocked"
+                    : "rounded-xl border border-shield-cyan/20 bg-shield-cyan/5 p-3 text-shield-cyan"
+                }
+              >
+                {chunk}
+              </div>
+            ))}
           </div>
         </GlassCard>
         <GlassCard>

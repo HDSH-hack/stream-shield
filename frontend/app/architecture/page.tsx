@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/layout/app-shell";
+import { Fragment } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionTitle } from "@/components/ui/section-title";
@@ -26,9 +27,8 @@ const ArchitecturePage = () => {
         />
         <div className="grid gap-3 lg:grid-cols-[repeat(13,minmax(0,1fr))]">
           {architectureNodes.map((node, index) => (
-            <>
+            <Fragment key={node.title}>
               <div
-                key={node.title}
                 className={
                   index === architectureNodes.length - 1
                     ? "min-h-36 rounded-xl border border-shield-safe/25 bg-shield-safe/10 p-4 text-sm font-semibold text-white shadow-[0_0_28px_rgba(52,211,153,0.12)]"
@@ -47,13 +47,12 @@ const ArchitecturePage = () => {
               </div>
               {index < architectureNodes.length - 1 ? (
                 <div
-                  key={`${node.title}-connector`}
                   className="hidden items-center lg:flex"
                 >
                   <div className="h-px w-full bg-gradient-to-r from-shield-cyan/20 via-shield-cyan to-shield-cyan/20" />
                 </div>
               ) : null}
-            </>
+            </Fragment>
           ))}
         </div>
       </GlassCard>
