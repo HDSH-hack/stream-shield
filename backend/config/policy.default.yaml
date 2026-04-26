@@ -18,7 +18,7 @@ guard:
   # if you have an HF_TOKEN with the gated-repo license accepted.
   primary_model: protectai/deberta-v3-base-prompt-injection-v2
   runtime: transformers       # transformers | onnx
-  max_length: 512
+  max_length: 128             # PI prompts are short; 512 wastes 4x on padding
   l2_judge:
     enabled: false
     model: google/gemma-2-2b-it

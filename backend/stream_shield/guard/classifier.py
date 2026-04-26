@@ -36,6 +36,7 @@ class L1Classifier:
         self._mdl: Any | None = None
         self._mal_idx: int = 1
         self._loaded = False
+        self._device: str = "cpu"
 
     def _load(self) -> None:
         if self._loaded:
@@ -46,9 +47,22 @@ class L1Classifier:
             )
         # Heavy imports are deferred so module import stays cheap.
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
-        import torch  # noqa: F401 — surfaces missing-dep error here, not later
+        import torch
 
-        logger.info("loading L1 model: %s", self.model_id)
+        # Pick best available device. MPS on Apple Silicon, CUDA on NVIDIA,
+        # else CPU. Override via STREAM_SHIELD_DEVICE env (cpu|mps|cuda).
+        import os
+        env_dev = os.environ.get("STREAM_SHIELD_DEVICE", "").lower()
+        if env_dev in {"cpu", "mps", "cuda"}:
+            self._device = env_dev
+        elif torch.cuda.is_available():
+            self._device = "cuda"
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            self._device = "mps"
+        else:
+            self._device = "cpu"
+
+        logger.info("loading L1 model: %s (device=%s)", self.model_id, self._device)
         self._tok = AutoTokenizer.from_pretrained(self.model_id)
         # low_cpu_mem_usage=False forces eager weight loading. Without this,
         # newer transformers leave the classifier head on the 'meta' device,
@@ -58,7 +72,7 @@ class L1Classifier:
             self.model_id,
             low_cpu_mem_usage=False,
         )
-        self._mdl.to("cpu")
+        self._mdl.to(self._device)
         self._mdl.eval()
 
         id2label = self._mdl.config.id2label
@@ -90,6 +104,8 @@ class L1Classifier:
             enc = self._tok(  # type: ignore[misc]
                 text, return_tensors="pt", truncation=True, max_length=self.max_length,
             )
+            if self._device != "cpu":
+                enc = {k: v.to(self._device) for k, v in enc.items()}
             logits = self._mdl(**enc).logits[0]  # type: ignore[misc]
             probs = torch.softmax(logits, dim=-1)
             score = float(probs[self._mal_idx])
