@@ -80,7 +80,7 @@ def parse_server_message(msg: dict[str, Any]) -> ServerEvent:
 # ---------------------------------------------------------------------------
 
 def build_setup_message(
-    model: str = "models/gemini-2.0-flash-live-001",
+    model: str = "models/gemini-3.1-flash-live-preview",
     *,
     response_modalities: list[str] | None = None,
     system_instruction: str | None = None,

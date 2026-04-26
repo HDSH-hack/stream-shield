@@ -20,7 +20,7 @@ from stream_shield.policy import Policy
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "models/gemini-2.0-flash-live-001"
+DEFAULT_MODEL = "models/gemini-3.1-flash-live-preview"
 
 
 def _build_live_config(policy: Policy) -> types.LiveConnectConfig:
