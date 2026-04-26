@@ -151,3 +151,43 @@ def verify_log(log_path: Path, public_key_pem: bytes | None = None) -> tuple[boo
                 return False, f"line {lineno}: bad signature ({e})"
         prev = h
     return True, f"verified {expected_seq} entries"
+
+
+def _cli(argv: list[str] | None = None) -> int:
+    """`python -m stream_shield.receipt <verify|inspect> ...`"""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="stream_shield.receipt")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    v = sub.add_parser("verify", help="replay + verify a receipt log")
+    v.add_argument("log", type=Path)
+    v.add_argument("--pubkey", type=Path, default=None,
+                   help="PEM public key path; omit to skip signature check")
+
+    i = sub.add_parser("inspect", help="dump entries one per line")
+    i.add_argument("log", type=Path)
+
+    args = ap.parse_args(argv)
+
+    if args.cmd == "verify":
+        pem = args.pubkey.read_bytes() if args.pubkey and args.pubkey.exists() else None
+        ok, msg = verify_log(args.log, pem)
+        print(("OK   " if ok else "FAIL ") + msg)
+        return 0 if ok else 1
+
+    if args.cmd == "inspect":
+        for line in args.log.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                entry = json.loads(line)
+                print(f"#{entry['seq']:>4}  ts={entry['ts']:.3f}  "
+                      f"digest={entry['decision_digest'][:12]}...  "
+                      f"sig={'yes' if entry.get('sig') else 'no '}")
+        return 0
+
+    return 2
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(_cli())
