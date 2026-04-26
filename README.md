@@ -111,10 +111,14 @@ uvicorn stream_shield.server:app --reload --port 8000
 ```bash
 cd frontend
 pnpm install
+cp .env.example .env.local
 pnpm dev
 ```
 
 브라우저에서 `http://localhost:3000` 접속 → Stream Shield frontend demo.
+
+기본 WebSocket endpoint 는 `NEXT_PUBLIC_STREAM_SHIELD_WS_URL` 로 설정합니다.
+로컬 기본값은 `ws://127.0.0.1:8000/ws` 입니다.
 
 ### Eval / per-entity comparison
 

@@ -22,8 +22,8 @@ const DemoPage = () => {
       <PageHeader
         eyebrow="Live Demo Dashboard"
         title="Blocked before Gemini"
-        description="The dashboard screen will show live input, guard decisions, upstream delivery, metrics, and block logs."
-        status="Connected to Gemini Live API"
+        description="Frontend dashboard for live input, guard decisions, upstream delivery, metrics, and block logs."
+        status="Backend interface ready"
       />
       <div className="grid gap-4 md:grid-cols-4">
         {dashboardMetrics.map((metric) => (

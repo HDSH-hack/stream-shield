@@ -66,6 +66,7 @@ const fallbackDecisionForStep = (
 
 const PlaygroundPage = () => {
   const defaultScenarioIndex = 2;
+  const wsUrl = getShieldWsUrl(sessionId);
   const [selectedIndex, setSelectedIndex] = useState(defaultScenarioIndex);
   const [activeStep, setActiveStep] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -195,7 +196,6 @@ const PlaygroundPage = () => {
   };
 
   const sendChunksToBackend = () => {
-    const wsUrl = getShieldWsUrl(sessionId);
     setConnectionState("connecting");
 
     let socket: WebSocket;
@@ -260,13 +260,11 @@ const PlaygroundPage = () => {
     setModelResponseText("");
     setBackendEvents([]);
     setAudioChunkCount(0);
+    setAudioStatus("idle");
     setConnectionState("idle");
   };
 
   const runSimulation = async () => {
-    if (micStatus !== "granted") {
-      await requestMicrophone();
-    }
     setDecisions({});
     setActiveStep(0);
     setIsRunning(true);
@@ -296,7 +294,6 @@ const PlaygroundPage = () => {
       return;
     }
 
-    const wsUrl = getShieldWsUrl(sessionId);
     setAudioStatus("starting");
     setConnectionState("connecting");
 
@@ -375,8 +372,8 @@ const PlaygroundPage = () => {
       <PageHeader
         eyebrow="Attack Playground"
         title="Simulate split-stream attacks."
-        description="Scenario controls and animated chunk flow will live here."
-        status="Sandbox ready"
+        description="Send text simulations or live mic chunks through the Stream Shield backend channel."
+        status="Backend interface ready"
       />
       <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
         <GlassCard className="min-h-[34rem]">
@@ -520,9 +517,9 @@ const PlaygroundPage = () => {
                   Backend channel
                 </span>
                 {connectionState === "connected"
-                  ? "connected to ws://127.0.0.1:8000"
+                  ? `connected to ${wsUrl}`
                   : connectionState === "fallback"
-                    ? "fallback decisions active"
+                    ? "backend unavailable, local fallback active"
                     : connectionState}
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-shield-muted">
@@ -546,7 +543,7 @@ const PlaygroundPage = () => {
                   Transcript
                 </p>
                 <p className="mt-3 min-h-16 text-sm leading-6 text-white">
-                  {transcriptText || "Waiting for backend transcript events."}
+                  {transcriptText || "Waiting for transcript broadcast."}
                 </p>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -555,7 +552,7 @@ const PlaygroundPage = () => {
                 </p>
                 <p className="mt-3 min-h-16 text-sm leading-6 text-white">
                   {modelResponseText ||
-                    "Waiting for Gemini Live response events."}
+                    "Waiting for model response broadcast."}
                 </p>
               </div>
             </div>
