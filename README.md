@@ -15,6 +15,43 @@ A WebSocket proxy that sits in front of Gemini Live API:
 
 See [`UNIFIED_DESIGN.md`](./UNIFIED_DESIGN.md) for full architecture.
 
+## End-to-end flow (one turn)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Browser<br/>(mic + UI + TTS)
+    participant P as Stream Shield<br/>(FastAPI WS proxy)
+    participant G as Guard<br/>(L0 → L1 → L2)
+    participant M as Gemini Live API
+
+    U->>P: PCM 16kHz audio chunks
+    P->>M: forward audio (auto-VAD on)
+    M-->>P: inputTranscription
+    P-->>U: { type: "transcript", text }
+    par classify in background
+        P->>G: classify(transcript)
+        G-->>P: Verdict(score, layer, reason)
+    and Gemini auto-responds
+        M-->>P: auto modelTurn (discarded)
+        M-->>P: turnComplete
+    end
+    alt Verdict = SAFE
+        P->>M: clientContent(transcript)
+        M-->>P: response audio chunks
+        P-->>U: TTS audio
+        P-->>U: { type: "decision", decision: "ALLOW" }
+    else Verdict = BLOCK
+        P-->>U: { type: "decision", decision: "BLOCK", layer, reason }
+        Note over P,M: nothing forwarded — Gemini never sees the prompt
+        P->>P: ReceiptLog.append (if policy.receipt_enabled)
+    end
+```
+
+The classifier runs *during* Gemini's auto-VAD turn. By the time `turnComplete`
+arrives, the verdict is ready — so safe input flows through with no wait, and
+malicious input is dropped before any user-visible response is generated.
+
 ## Layout
 
 ```
