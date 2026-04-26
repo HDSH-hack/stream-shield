@@ -13,7 +13,10 @@ buffer:
   response_buffer_ms: 100
 
 guard:
-  primary_model: meta-llama/Llama-Prompt-Guard-2-86M
+  # Open license, no HF auth needed. ~184M params, English-focused but works
+  # decently on Korean PI patterns. Swap to meta-llama/Llama-Prompt-Guard-2-86M
+  # if you have an HF_TOKEN with the gated-repo license accepted.
+  primary_model: protectai/deberta-v3-base-prompt-injection-v2
   runtime: transformers       # transformers | onnx
   max_length: 512
   l2_judge:
