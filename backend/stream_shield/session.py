@@ -2,21 +2,41 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
+
+
+class SessionState(str, Enum):
+    RELAYING = "RELAYING"      # audio relay, no classification pending
+    JUDGING = "JUDGING"        # classifier running, modelTurn buffered
+    SAFE = "SAFE"              # classifier passed, flushing buffer
+    BLOCKED = "BLOCKED"        # classifier blocked, dropping buffer
 
 
 @dataclass
 class ShieldSession:
     session_id: str
-    upstream: Any  # Gemini WS connection
+    upstream: Any                          # Gemini Live AsyncSession
     policy: Any
-    text_buffer: str = ""           # already-released-to-Gemini context
-    pending_text: str = ""          # held back, not yet released
-    transcript_buffer: str = ""     # auto-VAD transcript accumulation
-    last_safe_offset: int = 0
-    blocked: bool = False
+    state: SessionState = SessionState.RELAYING
+
+    # Transcript accumulation (from Gemini inputTranscription)
+    transcript_buffer: str = ""            # accumulated transcript for current turn
+
+    # Classifier
+    pending_verdict: asyncio.Task | None = None  # running classify task
+
+    # Stats
+    total_turns: int = 0
+    blocked_turns: int = 0
     scores: list[float] = field(default_factory=list)
-    receipts: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
+
+    def reset_turn(self) -> None:
+        """Reset per-turn state for next utterance."""
+        self.transcript_buffer = ""
+        self.pending_verdict = None
+        self.state = SessionState.RELAYING
