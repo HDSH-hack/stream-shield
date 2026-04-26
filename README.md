@@ -22,34 +22,35 @@ Wire-level contract — see [`docs/api.md`](./docs/api.md) for the full spec.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Browser<br/>(Next.js + AudioWorklet)
-    participant P as Stream Shield<br/>(FastAPI WS at /ws/{sid})
-    participant G as Guard<br/>(L0 → L1 → L2)
+    participant U as Browser
+    participant P as Stream Shield Proxy
+    participant G as Guard Engine
     participant M as Gemini Live
 
-    U->>P: { type: "realtimeInput.audio",<br/>seq, mimeType: "audio/pcm;rate=16000",<br/>data: base64(PCM16 mono 16kHz) }
-    P->>P: base64 decode → PCM bytes
-    P->>M: send_realtime_input(audio)<br/>(auto-VAD on)
-    M-->>P: server_content.input_transcription
-    P-->>U: { type: "transcript",<br/>seq, text, final: true }
+    U->>P: realtimeInput.audio (base64 PCM 16kHz)
+    P->>M: send_realtime_input audio (auto-VAD on)
+    M-->>P: input_transcription
+    P-->>U: transcript event (text, final)
+
     par classify in background
-        P->>G: GuardEngine.classify(transcript)
-        G-->>P: Decision(action, score, verdict.layer, reason)
-    and Gemini auto-responds (Phase 1)
-        M-->>P: server_content.model_turn (discarded)
-        M-->>P: server_content.turn_complete
+        P->>G: classify(transcript)
+        G-->>P: Decision (action, score, layer)
+    and Gemini auto-responds Phase 1
+        M-->>P: auto model_turn (discarded)
+        M-->>P: turn_complete
     end
+
     alt action = ALLOW
-        P-->>U: { type: "decision",<br/>seq, verdict: "SAFE", action: "SAFE", score }
-        P->>M: send_client_content(transcript)
-        M-->>P: server_content.model_turn (Phase 2 response)
-        P-->>U: { type: "response_text", seq, delta, final: false }
-        P-->>U: ws.send_bytes(TTS audio)
-        P-->>U: { type: "response_text", seq, final: true }
+        P-->>U: decision SAFE
+        P->>M: send_client_content (transcript)
+        M-->>P: model_turn Phase 2 response
+        P-->>U: response_text delta
+        P-->>U: ws.send_bytes (TTS audio)
+        P-->>U: response_text final
     else action = BLOCK
-        P-->>U: { type: "blocked",<br/>seq, verdict: "BLOCKED", score,<br/>reason, upstream: layer }
+        P-->>U: blocked event (score, reason, layer)
         Note over P,M: nothing forwarded — Gemini never sees the prompt
-        P->>P: ReceiptLog.append (if policy.receipt.enabled)
+        P->>P: ReceiptLog.append (if receipt.enabled)
     end
 ```
 
