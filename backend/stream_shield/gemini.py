@@ -22,11 +22,15 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "models/gemini-3.1-flash-live-preview"
 
+# Phase 0 PoC result: this model is AUDIO-only (TEXT modality fails).
+# inputTranscription arrives ~1-2ms BEFORE first modelTurn.
+# → parallel pipeline confirmed viable.
+
 
 def _build_live_config(policy: Policy) -> types.LiveConnectConfig:
     """Build LiveConnectConfig from our Policy dataclass."""
     return types.LiveConnectConfig(
-        response_modalities=["TEXT"],
+        response_modalities=["AUDIO"],
         input_audio_transcription=types.AudioTranscriptionConfig(),
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
