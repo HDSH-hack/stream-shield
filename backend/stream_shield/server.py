@@ -1,13 +1,11 @@
 """FastAPI WebSocket server — Stream Shield entry point.
 
-Architecture (VAD-respecting, single-response pipeline):
+Architecture (VAD-respecting parallel pipeline):
 1. Client audio (JSON base64) → Proxy → Gemini (auto-VAD, STT)
-2. inputTranscription → classifier in background while Gemini generates response
-3. Gemini's auto-response chunks are *buffered*, not discarded
-4. On turn_complete:
-     - SAFE  → flush buffered chunks to client + final marker
-     - BLOCK → drop buffered chunks + send 'blocked' event
-   No clientContent re-issue — Gemini only generates one response per turn.
+2. inputTranscription → classifier in background during auto-response
+3. Auto-response discarded, turnComplete waited (VAD respected)
+4. Safe → clientContent(transcript) → relay response to client
+5. Blocked → send block notification
 
 Frontend interface: see docs/api.md
 """
@@ -154,116 +152,123 @@ async def _handle_client(ws, session: ShieldSession, buffer_mgr: BufferManager):
 async def _handle_gemini(ws, session: ShieldSession, buffer_mgr: BufferManager):
     """Handle Gemini Live events, apply guard, relay to frontend.
 
-    Pipeline (single-response, parallel classify):
-      transcript → start classifier (background)
-      model_turn chunks → buffer while classifier still running
-      turn_complete → await classifier:
-          BLOCK → drop buffer + send 'blocked'
-          SAFE  → flush buffer + send 'response_text' chunks + final marker
+    Per-turn flow (audio path, VAD-respecting):
+    Phase 1: auto-VAD runs. inputTranscription → classify in background.
+             Auto-response modelTurn → discard. Wait for turnComplete.
+    Phase 2: safe → send clientContent → relay response.
+             blocked → send block event.
     """
-    # Per-turn buffers (cleared on every transcript / reset_turn).
-    pending_text: list[str] = []
-    pending_audio: list[bytes] = []
+    while True:
+        async for msg in session.upstream.receive():
+            sc = msg.server_content
+            if sc is None:
+                continue
 
-    def _reset_buffers() -> None:
-        pending_text.clear()
-        pending_audio.clear()
+            # --- Phase 1: inputTranscription → classify ---
+            if sc.input_transcription and sc.input_transcription.text:
+                transcript = sc.input_transcription.text
+                logger.info("transcript: %r", transcript[:80])
+                session.transcript_buffer = transcript
+                session.state = SessionState.JUDGING
 
-    async for msg in session.upstream.receive():
-        sc = msg.server_content
-        if sc is None:
-            continue
-
-        # --- transcript → classify (parallel) ---
-        if sc.input_transcription and sc.input_transcription.text:
-            transcript = sc.input_transcription.text
-            logger.info("transcript: %r", transcript[:80])
-            session.transcript_buffer = transcript
-            session.state = SessionState.JUDGING
-            _reset_buffers()
-
-            await ws.send_json({
-                "type": "transcript",
-                "seq": session.next_seq(),
-                "text": transcript,
-                "final": True,
-            })
-
-            session.pending_verdict = asyncio.create_task(
-                buffer_mgr.classify(session, transcript)
-            )
-
-        # --- model_turn chunks → buffer until verdict + turn_complete ---
-        if sc.model_turn:
-            for part in sc.model_turn.parts or []:
-                if session.state in (SessionState.JUDGING, SessionState.RELAYING):
-                    if part.text:
-                        pending_text.append(part.text)
-                    if part.inline_data and part.inline_data.data:
-                        pending_audio.append(part.inline_data.data)
-                # state == BLOCKED: drop silently. SAFE shouldn't happen
-                # before turn_complete in this design, but if it does we
-                # still buffer to keep ordering deterministic.
-
-        # --- turn_complete → resolve verdict, flush or drop ---
-        if sc.turn_complete:
-            decision = None
-            if session.pending_verdict:
-                decision = await session.pending_verdict
-
-            if decision and decision.action == Action.BLOCK:
-                session.state = SessionState.BLOCKED
-                session.blocked_turns += 1
-                logger.info(
-                    "BLOCK: score=%.3f reason=%s (%d chunks dropped)",
-                    decision.score, decision.reason,
-                    len(pending_text) + len(pending_audio),
-                )
-                _reset_buffers()
                 await ws.send_json({
-                    "type": "blocked",
+                    "type": "transcript",
                     "seq": session.next_seq(),
-                    "verdict": "BLOCKED",
-                    "action": "BLOCKED",
-                    "score": decision.score,
-                    "reason": decision.reason,
-                    "upstream": decision.verdict.layer if decision.verdict else "unknown",
+                    "text": transcript,
+                    "final": True,
                 })
-            elif session.transcript_buffer:
-                session.state = SessionState.SAFE
-                logger.info(
-                    "ALLOW: flushing %d text + %d audio chunks",
-                    len(pending_text), len(pending_audio),
+
+                session.pending_verdict = asyncio.create_task(
+                    buffer_mgr.classify(session, transcript)
                 )
-                await ws.send_json({
-                    "type": "decision",
-                    "seq": session.next_seq(),
-                    "verdict": "SAFE",
-                    "action": "SAFE",
-                    "score": decision.score if decision else 0.0,
-                })
-                for text_chunk in pending_text:
+
+            # --- Phase 1: auto-response modelTurn → discard ---
+            if sc.model_turn and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+                pass
+
+            # --- Phase 1 end: turnComplete → Phase 2 ---
+            if sc.turn_complete and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+                decision = None
+                if session.pending_verdict:
+                    decision = await session.pending_verdict
+
+                if decision and decision.action == Action.BLOCK:
+                    session.state = SessionState.BLOCKED
+                    session.blocked_turns += 1
+                    logger.info("BLOCK: score=%.3f reason=%s", decision.score, decision.reason)
+
+                    await ws.send_json({
+                        "type": "blocked",
+                        "seq": session.next_seq(),
+                        "verdict": "BLOCKED",
+                        "action": "BLOCKED",
+                        "score": decision.score,
+                        "reason": decision.reason,
+                        "upstream": decision.verdict.layer if decision.verdict else "unknown",
+                    })
+                    session.reset_turn()
+
+                elif session.transcript_buffer:
+                    session.state = SessionState.SAFE
+                    logger.info("ALLOW: sending transcript as clientContent")
+
+                    await ws.send_json({
+                        "type": "decision",
+                        "seq": session.next_seq(),
+                        "verdict": "SAFE",
+                        "action": "SAFE",
+                        "score": decision.score if decision else 0.0,
+                    })
+
+                    await session.upstream.send_client_content(
+                        turns=[types.Content(
+                            role="user",
+                            parts=[types.Part(text=session.transcript_buffer)],
+                        )],
+                        turn_complete=True,
+                    )
+                else:
+                    session.reset_turn()
+                # break inner loop to call receive() again for Phase 2
+                break
+
+            # --- Phase 2: output transcription → relay as text ---
+            if hasattr(sc, 'output_transcription') and sc.output_transcription and session.state == SessionState.SAFE:
+                text = sc.output_transcription.text if hasattr(sc.output_transcription, 'text') else str(sc.output_transcription)
+                if text:
                     await ws.send_json({
                         "type": "response_text",
                         "seq": session.next_seq(),
-                        "delta": text_chunk,
+                        "delta": text,
                         "final": False,
                     })
-                for audio_chunk in pending_audio:
-                    await ws.send_bytes(audio_chunk)
-                _reset_buffers()
+
+            # --- Phase 2: relay clientContent response ---
+            if sc.model_turn and session.state == SessionState.SAFE:
+                for part in sc.model_turn.parts or []:
+                    if part.text:
+                        await ws.send_json({
+                            "type": "response_text",
+                            "seq": session.next_seq(),
+                            "delta": part.text,
+                            "final": False,
+                        })
+                    if part.inline_data and part.inline_data.data:
+                        await ws.send_bytes(part.inline_data.data)
+
+            # --- Phase 2: response turnComplete ---
+            if sc.turn_complete and session.state == SessionState.SAFE:
+                logger.info("response turn complete (total=%d, blocked=%d)",
+                            session.total_turns, session.blocked_turns)
                 await ws.send_json({
                     "type": "response_text",
                     "seq": session.next_seq(),
                     "final": True,
                 })
-            else:
-                # No transcript this turn (silence / VAD glitch). Drop quietly.
-                _reset_buffers()
+                session.reset_turn()
 
-            session.reset_turn()
-            continue
+            if sc.turn_complete and session.state == SessionState.BLOCKED:
+                session.reset_turn()
 
         if sc.interrupted:
             logger.info("interrupted")
-            _reset_buffers()
