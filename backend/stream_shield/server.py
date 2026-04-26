@@ -1,11 +1,15 @@
 """FastAPI WebSocket server — Stream Shield entry point.
 
-Architecture (VAD-respecting parallel pipeline):
+Architecture (single-response, parallel-classify pipeline):
 1. Client audio (JSON base64) → Proxy → Gemini (auto-VAD, STT)
-2. inputTranscription → classifier in background during auto-response
-3. Auto-response discarded, turnComplete waited (VAD respected)
-4. Safe → clientContent(transcript) → relay response to client
-5. Blocked → send block notification
+2. input_transcription side-channel → start classifier in background
+3. Gemini's auto-response chunks (model_turn audio + output_transcription text)
+   are *buffered* in the proxy while the classifier runs
+4. On turn_complete:
+     SAFE  → flush buffered text + audio to client + final marker
+     BLOCK → drop buffered chunks + send 'blocked' event
+
+One Gemini generation per turn — no clientContent re-issue.
 
 Frontend interface: see docs/api.md
 """
@@ -152,123 +156,121 @@ async def _handle_client(ws, session: ShieldSession, buffer_mgr: BufferManager):
 async def _handle_gemini(ws, session: ShieldSession, buffer_mgr: BufferManager):
     """Handle Gemini Live events, apply guard, relay to frontend.
 
-    Per-turn flow (audio path, VAD-respecting):
-    Phase 1: auto-VAD runs. inputTranscription → classify in background.
-             Auto-response modelTurn → discard. Wait for turnComplete.
-    Phase 2: safe → send clientContent → relay response.
-             blocked → send block event.
+    Single-response, parallel-classify pipeline:
+      input_transcription → start classifier (background)
+      output_transcription → buffer text deltas
+      model_turn audio chunks → buffer audio
+      turn_complete → await verdict:
+          BLOCK → drop buffers + send 'blocked'
+          SAFE  → flush text deltas + audio bytes + final marker
+
+    No clientContent re-issue. One Gemini generation per turn.
     """
-    while True:
-        async for msg in session.upstream.receive():
-            sc = msg.server_content
-            if sc is None:
-                continue
+    pending_text: list[str] = []
+    pending_audio: list[bytes] = []
 
-            # --- Phase 1: inputTranscription → classify ---
-            if sc.input_transcription and sc.input_transcription.text:
-                transcript = sc.input_transcription.text
-                logger.info("transcript: %r", transcript[:80])
-                session.transcript_buffer = transcript
-                session.state = SessionState.JUDGING
+    def reset_buffers() -> None:
+        pending_text.clear()
+        pending_audio.clear()
 
-                await ws.send_json({
-                    "type": "transcript",
-                    "seq": session.next_seq(),
-                    "text": transcript,
-                    "final": True,
-                })
+    async for msg in session.upstream.receive():
+        sc = msg.server_content
+        if sc is None:
+            continue
 
-                session.pending_verdict = asyncio.create_task(
-                    buffer_mgr.classify(session, transcript)
+        # --- input transcription → start classifier (parallel) ---
+        if sc.input_transcription and sc.input_transcription.text:
+            transcript = sc.input_transcription.text
+            logger.info("transcript: %r", transcript[:80])
+            session.transcript_buffer = transcript
+            session.state = SessionState.JUDGING
+            reset_buffers()
+
+            await ws.send_json({
+                "type": "transcript",
+                "seq": session.next_seq(),
+                "text": transcript,
+                "final": True,
+            })
+
+            session.pending_verdict = asyncio.create_task(
+                buffer_mgr.classify(session, transcript)
+            )
+
+        # --- output transcription text deltas → buffer ---
+        out_tx = getattr(sc, "output_transcription", None)
+        if out_tx is not None:
+            text = getattr(out_tx, "text", None) or ""
+            if text and session.state in (SessionState.JUDGING, SessionState.RELAYING):
+                pending_text.append(text)
+
+        # --- model_turn (audio + occasional inline text) → buffer ---
+        if sc.model_turn and session.state in (SessionState.JUDGING, SessionState.RELAYING):
+            for part in sc.model_turn.parts or []:
+                if part.text:
+                    pending_text.append(part.text)
+                if part.inline_data and part.inline_data.data:
+                    pending_audio.append(part.inline_data.data)
+
+        # --- turn_complete → resolve verdict, flush or drop ---
+        if sc.turn_complete:
+            decision = None
+            if session.pending_verdict:
+                decision = await session.pending_verdict
+
+            if decision and decision.action == Action.BLOCK:
+                session.state = SessionState.BLOCKED
+                session.blocked_turns += 1
+                logger.info(
+                    "BLOCK: score=%.3f reason=%s (%d text + %d audio chunks dropped)",
+                    decision.score, decision.reason,
+                    len(pending_text), len(pending_audio),
                 )
-
-            # --- Phase 1: auto-response modelTurn → discard ---
-            if sc.model_turn and session.state in (SessionState.RELAYING, SessionState.JUDGING):
-                pass
-
-            # --- Phase 1 end: turnComplete → Phase 2 ---
-            if sc.turn_complete and session.state in (SessionState.RELAYING, SessionState.JUDGING):
-                decision = None
-                if session.pending_verdict:
-                    decision = await session.pending_verdict
-
-                if decision and decision.action == Action.BLOCK:
-                    session.state = SessionState.BLOCKED
-                    session.blocked_turns += 1
-                    logger.info("BLOCK: score=%.3f reason=%s", decision.score, decision.reason)
-
-                    await ws.send_json({
-                        "type": "blocked",
-                        "seq": session.next_seq(),
-                        "verdict": "BLOCKED",
-                        "action": "BLOCKED",
-                        "score": decision.score,
-                        "reason": decision.reason,
-                        "upstream": decision.verdict.layer if decision.verdict else "unknown",
-                    })
-                    session.reset_turn()
-
-                elif session.transcript_buffer:
-                    session.state = SessionState.SAFE
-                    logger.info("ALLOW: sending transcript as clientContent")
-
-                    await ws.send_json({
-                        "type": "decision",
-                        "seq": session.next_seq(),
-                        "verdict": "SAFE",
-                        "action": "SAFE",
-                        "score": decision.score if decision else 0.0,
-                    })
-
-                    await session.upstream.send_client_content(
-                        turns=[types.Content(
-                            role="user",
-                            parts=[types.Part(text=session.transcript_buffer)],
-                        )],
-                        turn_complete=True,
-                    )
-                else:
-                    session.reset_turn()
-                # break inner loop to call receive() again for Phase 2
-                break
-
-            # --- Phase 2: output transcription → relay as text ---
-            if hasattr(sc, 'output_transcription') and sc.output_transcription and session.state == SessionState.SAFE:
-                text = sc.output_transcription.text if hasattr(sc.output_transcription, 'text') else str(sc.output_transcription)
-                if text:
+                reset_buffers()
+                await ws.send_json({
+                    "type": "blocked",
+                    "seq": session.next_seq(),
+                    "verdict": "BLOCKED",
+                    "action": "BLOCKED",
+                    "score": decision.score,
+                    "reason": decision.reason,
+                    "upstream": decision.verdict.layer if decision.verdict else "unknown",
+                })
+            elif session.transcript_buffer:
+                session.state = SessionState.SAFE
+                logger.info(
+                    "ALLOW: flushing %d text + %d audio chunks",
+                    len(pending_text), len(pending_audio),
+                )
+                await ws.send_json({
+                    "type": "decision",
+                    "seq": session.next_seq(),
+                    "verdict": "SAFE",
+                    "action": "SAFE",
+                    "score": decision.score if decision else 0.0,
+                })
+                for text_chunk in pending_text:
                     await ws.send_json({
                         "type": "response_text",
                         "seq": session.next_seq(),
-                        "delta": text,
+                        "delta": text_chunk,
                         "final": False,
                     })
-
-            # --- Phase 2: relay clientContent response ---
-            if sc.model_turn and session.state == SessionState.SAFE:
-                for part in sc.model_turn.parts or []:
-                    if part.text:
-                        await ws.send_json({
-                            "type": "response_text",
-                            "seq": session.next_seq(),
-                            "delta": part.text,
-                            "final": False,
-                        })
-                    if part.inline_data and part.inline_data.data:
-                        await ws.send_bytes(part.inline_data.data)
-
-            # --- Phase 2: response turnComplete ---
-            if sc.turn_complete and session.state == SessionState.SAFE:
-                logger.info("response turn complete (total=%d, blocked=%d)",
-                            session.total_turns, session.blocked_turns)
+                for audio_chunk in pending_audio:
+                    await ws.send_bytes(audio_chunk)
+                reset_buffers()
                 await ws.send_json({
                     "type": "response_text",
                     "seq": session.next_seq(),
                     "final": True,
                 })
-                session.reset_turn()
+            else:
+                # No transcript this turn (silence / VAD glitch).
+                reset_buffers()
 
-            if sc.turn_complete and session.state == SessionState.BLOCKED:
-                session.reset_turn()
+            session.reset_turn()
+            continue
 
         if sc.interrupted:
             logger.info("interrupted")
+            reset_buffers()
