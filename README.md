@@ -17,40 +17,46 @@ See [`UNIFIED_DESIGN.md`](./UNIFIED_DESIGN.md) for full architecture.
 
 ## End-to-end flow (one turn)
 
+Wire-level contract — see [`docs/api.md`](./docs/api.md) for the full spec.
+
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Browser<br/>(mic + UI + TTS)
-    participant P as Stream Shield<br/>(FastAPI WS proxy)
+    participant U as Browser<br/>(Next.js + AudioWorklet)
+    participant P as Stream Shield<br/>(FastAPI WS at /ws/{sid})
     participant G as Guard<br/>(L0 → L1 → L2)
-    participant M as Gemini Live API
+    participant M as Gemini Live
 
-    U->>P: PCM 16kHz audio chunks
-    P->>M: forward audio (auto-VAD on)
-    M-->>P: inputTranscription
-    P-->>U: { type: "transcript", text }
+    U->>P: { type: "realtimeInput.audio",<br/>seq, mimeType: "audio/pcm;rate=16000",<br/>data: base64(PCM16 mono 16kHz) }
+    P->>P: base64 decode → PCM bytes
+    P->>M: send_realtime_input(audio)<br/>(auto-VAD on)
+    M-->>P: server_content.input_transcription
+    P-->>U: { type: "transcript",<br/>seq, text, final: true }
     par classify in background
-        P->>G: classify(transcript)
-        G-->>P: Verdict(score, layer, reason)
-    and Gemini auto-responds
-        M-->>P: auto modelTurn (discarded)
-        M-->>P: turnComplete
+        P->>G: GuardEngine.classify(transcript)
+        G-->>P: Decision(action, score, verdict.layer, reason)
+    and Gemini auto-responds (Phase 1)
+        M-->>P: server_content.model_turn (discarded)
+        M-->>P: server_content.turn_complete
     end
-    alt Verdict = SAFE
-        P->>M: clientContent(transcript)
-        M-->>P: response audio chunks
-        P-->>U: TTS audio
-        P-->>U: { type: "decision", decision: "ALLOW" }
-    else Verdict = BLOCK
-        P-->>U: { type: "decision", decision: "BLOCK", layer, reason }
+    alt action = ALLOW
+        P-->>U: { type: "decision",<br/>seq, verdict: "SAFE", action: "SAFE", score }
+        P->>M: send_client_content(transcript)
+        M-->>P: server_content.model_turn (Phase 2 response)
+        P-->>U: { type: "response_text", seq, delta, final: false }
+        P-->>U: ws.send_bytes(TTS audio)
+        P-->>U: { type: "response_text", seq, final: true }
+    else action = BLOCK
+        P-->>U: { type: "blocked",<br/>seq, verdict: "BLOCKED", score,<br/>reason, upstream: layer }
         Note over P,M: nothing forwarded — Gemini never sees the prompt
-        P->>P: ReceiptLog.append (if policy.receipt_enabled)
+        P->>P: ReceiptLog.append (if policy.receipt.enabled)
     end
 ```
 
-The classifier runs *during* Gemini's auto-VAD turn. By the time `turnComplete`
-arrives, the verdict is ready — so safe input flows through with no wait, and
-malicious input is dropped before any user-visible response is generated.
+The classifier runs *during* Gemini's auto-VAD turn. By the time
+`turn_complete` arrives, the verdict is ready — so safe input flows through
+with no extra wait, and malicious input is dropped before any user-visible
+response is generated.
 
 ## Layout
 
