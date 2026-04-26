@@ -56,11 +56,24 @@ def load_policy(policy_id: str = "default") -> Policy:
         path = CONFIG_DIR / "policy.default.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
 
-    # Merge with parent if `extends` set
+    # Merge with parent if `extends` set: load parent raw YAML, then child overrides per top-level key.
     if "extends" in raw:
-        parent = load_policy(raw["extends"])
-        # naive shallow merge — child overrides parent
-        ...
+        parent_path = CONFIG_DIR / f"policy.{raw['extends']}.yaml"
+        if parent_path.exists():
+            parent_raw = yaml.safe_load(parent_path.read_text(encoding="utf-8")) or {}
+            merged: dict[str, Any] = {}
+            for k, v in parent_raw.items():
+                merged[k] = v
+            for k, v in raw.items():
+                if k == "extends":
+                    continue
+                if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                    nested = dict(merged[k])
+                    nested.update(v)
+                    merged[k] = nested
+                else:
+                    merged[k] = v
+            raw = merged
 
     p = Policy(policy_id=raw.get("policy_id", policy_id))
     if "thresholds" in raw:
