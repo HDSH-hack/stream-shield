@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionTitle } from "@/components/ui/section-title";
+import { metricsCards, modelSummary } from "@/lib/mock-data";
 
 const MetricsPage = () => {
   return (
@@ -13,16 +14,11 @@ const MetricsPage = () => {
         status="Live analytics"
       />
       <div className="grid gap-4 md:grid-cols-4">
-        {[
-          ["Attack Recall", "91.7%", "up vs last run"],
-          ["False Positive Rate", "3.2%", "down vs last run"],
-          ["Avg Guard Latency", "58ms", "p95 137ms"],
-          ["Bytes Leaked", "0", "No upstream leakage"],
-        ].map(([label, value, note]) => (
-          <GlassCard key={label} className="p-4">
-            <p className="text-xs text-shield-muted">{label}</p>
-            <p className="mt-2 text-2xl font-bold text-white">{value}</p>
-            <p className="mt-1 text-xs text-shield-muted">{note}</p>
+        {metricsCards.map((metric) => (
+          <GlassCard key={metric.label} className="p-4">
+            <p className="text-xs text-shield-muted">{metric.label}</p>
+            <p className="mt-2 text-2xl font-bold text-white">{metric.value}</p>
+            <p className="mt-1 text-xs text-shield-muted">{metric.note}</p>
           </GlassCard>
         ))}
       </div>
@@ -50,9 +46,9 @@ const MetricsPage = () => {
         <GlassCard>
           <SectionTitle title="Model Summary" />
           <div className="space-y-2 text-sm text-shield-muted">
-            <p>Active model: Prompt Guard 2 86M</p>
-            <p>Inference: local</p>
-            <p>Classification API cost: $0</p>
+            {modelSummary.map((item) => (
+              <p key={item}>{item}</p>
+            ))}
           </div>
         </GlassCard>
       </div>

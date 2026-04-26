@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionTitle } from "@/components/ui/section-title";
+import { architectureNodes, modelSummary, observabilityOutputs } from "@/lib/mock-data";
 
 const ArchitecturePage = () => {
   return (
@@ -18,15 +19,7 @@ const ArchitecturePage = () => {
           description="Only safe chunks continue upstream."
         />
         <div className="grid gap-3 lg:grid-cols-7">
-          {[
-            "Client / Demo UI",
-            "WebSocket Proxy",
-            "Rolling Buffer",
-            "Normalizer",
-            "Local Classifier",
-            "Policy Engine",
-            "Gemini Live API",
-          ].map((node) => (
+          {architectureNodes.map((node) => (
             <div
               key={node}
               className="min-h-28 rounded-xl border border-shield-cyan/20 bg-shield-cyan/5 p-4 text-sm font-semibold text-white"
@@ -47,18 +40,17 @@ const ArchitecturePage = () => {
         <GlassCard>
           <SectionTitle title="Runtime Summary" />
           <div className="space-y-2 text-sm text-shield-muted">
-            <p>Runtime: Python, asyncio, websockets</p>
-            <p>Model: Prompt Guard 2 86M</p>
-            <p>Buffer: rolling, overlap tail 128 chars</p>
+            {modelSummary.slice(0, 3).map((item) => (
+              <p key={item}>{item}</p>
+            ))}
           </div>
         </GlassCard>
         <GlassCard>
           <SectionTitle title="Observability + Outputs" />
           <div className="grid gap-2 text-sm text-shield-muted">
-            <p>Live Demo Dashboard</p>
-            <p>Block Log</p>
-            <p>Metrics</p>
-            <p>Attack Playground</p>
+            {observabilityOutputs.map((output) => (
+              <p key={output}>{output}</p>
+            ))}
           </div>
         </GlassCard>
       </div>

@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionTitle } from "@/components/ui/section-title";
+import { blockEvents, blockLogMetrics, selectedEvent } from "@/lib/mock-data";
 
 const BlockLogPage = () => {
   return (
@@ -13,15 +14,10 @@ const BlockLogPage = () => {
         status="Live monitoring"
       />
       <div className="grid gap-4 md:grid-cols-4">
-        {[
-          ["Total Events", "1,284"],
-          ["Blocked Events", "217"],
-          ["Active Sessions", "42"],
-          ["Mean Response Time", "61ms"],
-        ].map(([label, value]) => (
-          <GlassCard key={label} className="p-4">
-            <p className="text-xs text-shield-muted">{label}</p>
-            <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+        {blockLogMetrics.map((metric) => (
+          <GlassCard key={metric.label} className="p-4">
+            <p className="text-xs text-shield-muted">{metric.label}</p>
+            <p className="mt-2 text-2xl font-bold text-white">{metric.value}</p>
           </GlassCard>
         ))}
       </div>
@@ -39,18 +35,24 @@ const BlockLogPage = () => {
             <div className="h-10 w-32 rounded-xl border border-white/10 bg-white/[0.03]" />
           </div>
           <div className="rounded-xl border border-white/10">
-            {["prompt_injection", "korean_jailbreak", "normal_chat", "split_stream"].map(
-              (row) => (
-                <div
-                  key={row}
-                  className="grid grid-cols-[1fr_1fr_1fr] border-b border-white/10 p-4 text-sm last:border-b-0"
+            {blockEvents.map((event) => (
+              <div
+                key={`${event.time}-${event.session}`}
+                className="grid grid-cols-[1fr_1fr_1fr] border-b border-white/10 p-4 text-sm last:border-b-0"
+              >
+                <span className="text-white">{event.attackType}</span>
+                <span className="text-shield-muted">{event.session}</span>
+                <span
+                  className={
+                    event.verdict === "BLOCKED"
+                      ? "text-shield-blocked"
+                      : "text-shield-safe"
+                  }
                 >
-                  <span className="text-white">{row}</span>
-                  <span className="text-shield-muted">sess-a13f</span>
-                  <span className="text-shield-blocked">blocked</span>
-                </div>
-              ),
-            )}
+                  {event.verdict.toLowerCase()}
+                </span>
+              </div>
+            ))}
           </div>
         </GlassCard>
 
@@ -58,9 +60,9 @@ const BlockLogPage = () => {
           <GlassCard>
             <SectionTitle title="Selected Event" />
             <div className="space-y-2 text-sm text-shield-muted">
-              <p>Session ID: sess-a13f</p>
-              <p>Verdict: BLOCKED</p>
-              <p>Score: 0.93</p>
+              <p>Session ID: {selectedEvent.session}</p>
+              <p>Verdict: {selectedEvent.verdict}</p>
+              <p>Score: {selectedEvent.score.toFixed(2)}</p>
               <p>Upstream Leakage: 0 bytes</p>
             </div>
           </GlassCard>
