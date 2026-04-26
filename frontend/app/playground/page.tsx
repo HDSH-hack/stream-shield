@@ -2,6 +2,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { GlassCard } from "@/components/ui/glass-card";
 import { SectionTitle } from "@/components/ui/section-title";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   attackScenarios,
   expectedGuardBehavior,
@@ -36,13 +37,34 @@ const PlaygroundPage = () => {
             ))}
           </div>
           <div className="grid gap-3">
-            {attackScenarios.map((scenario) => (
+            {attackScenarios.map((scenario, index) => (
               <div
                 key={scenario.name}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white"
+                className={
+                  index === 2
+                    ? "rounded-xl border border-shield-cyan/35 bg-shield-cyan/10 p-4 text-sm text-white shadow-glow"
+                    : "rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white"
+                }
               >
-                <p>{scenario.name}</p>
-                <p className="mt-1 text-xs text-shield-muted">{scenario.category}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">{scenario.name}</p>
+                  <span className="rounded-full bg-white/[0.06] px-2 py-1 text-xs text-shield-muted">
+                    {scenario.category}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-shield-muted">
+                  {scenario.description}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {scenario.tags?.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-shield-muted"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -88,11 +110,21 @@ const PlaygroundPage = () => {
 
           <GlassCard>
             <SectionTitle title="Expected Guard Behavior" />
-            <div className="rounded-xl border border-shield-blocked/20 bg-shield-blocked/10 p-4 text-sm font-semibold text-shield-blocked">
-              {expectedGuardBehavior
-                .map((item) => `${item.verdict} ${item.score.toFixed(2)}`)
-                .join(" → ")}
-              . Blocked before Gemini.
+            <div className="grid gap-3 md:grid-cols-3">
+              {expectedGuardBehavior.map((item) => (
+                <div
+                  key={`${item.verdict}-${item.score}`}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                >
+                  <StatusBadge verdict={item.verdict} />
+                  <p className="mt-3 font-mono text-sm text-white">
+                    score {item.score.toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-xl border border-shield-blocked/20 bg-shield-blocked/10 p-4 text-sm font-semibold text-shield-blocked">
+              Blocked before Gemini.
             </div>
           </GlassCard>
         </div>

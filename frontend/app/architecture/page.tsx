@@ -19,11 +19,18 @@ const ArchitecturePage = () => {
           description="Only safe chunks continue upstream."
         />
         <div className="grid gap-3 lg:grid-cols-7">
-          {architectureNodes.map((node) => (
+          {architectureNodes.map((node, index) => (
             <div
               key={node}
-              className="min-h-28 rounded-xl border border-shield-cyan/20 bg-shield-cyan/5 p-4 text-sm font-semibold text-white"
+              className={
+                index === architectureNodes.length - 1
+                  ? "min-h-28 rounded-xl border border-shield-safe/25 bg-shield-safe/10 p-4 text-sm font-semibold text-white"
+                  : "min-h-28 rounded-xl border border-shield-cyan/20 bg-shield-cyan/5 p-4 text-sm font-semibold text-white"
+              }
             >
+              <span className="mb-3 block font-mono text-xs text-shield-muted">
+                0{index + 1}
+              </span>
               {node}
             </div>
           ))}

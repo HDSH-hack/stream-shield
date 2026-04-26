@@ -5,7 +5,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { PlaceholderPanel } from "@/components/ui/placeholder-panel";
 import { SectionTitle } from "@/components/ui/section-title";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { blockEvents, blockLogMetrics, selectedEvent } from "@/lib/mock-data";
+import { blockEvents, blockLogMetrics, chunkTrace, selectedEvent } from "@/lib/mock-data";
 
 const BlockLogPage = () => {
   return (
@@ -38,11 +38,12 @@ const BlockLogPage = () => {
             {blockEvents.map((event) => (
               <div
                 key={`${event.time}-${event.session}`}
-                className="grid grid-cols-[1fr_1fr_1fr] border-b border-white/10 p-4 text-sm last:border-b-0"
-                >
-                  <span className="text-white">{event.attackType}</span>
-                  <span className="text-shield-muted">{event.session}</span>
-                  <StatusBadge verdict={event.verdict} className="w-fit" />
+                className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-3 border-b border-white/10 p-4 text-sm last:border-b-0"
+              >
+                <span className="font-mono text-xs text-shield-muted">{event.time}</span>
+                <span className="text-white">{event.attackType}</span>
+                <span className="text-shield-muted">{event.session}</span>
+                <StatusBadge verdict={event.verdict} className="w-fit" />
                 </div>
               ))}
           </div>
@@ -60,11 +61,35 @@ const BlockLogPage = () => {
           </GlassCard>
           <GlassCard>
             <SectionTitle title="Chunk Trace" />
-            <PlaceholderPanel className="h-40" />
+            <div className="space-y-2">
+              {chunkTrace.map((chunk) => (
+                <div
+                  key={chunk.label}
+                  className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm"
+                >
+                  <span className="text-xs text-shield-muted">{chunk.label}</span>
+                  <span className="truncate font-mono text-xs text-white">
+                    {chunk.preview}
+                  </span>
+                  <StatusBadge verdict={chunk.verdict} />
+                </div>
+              ))}
+            </div>
           </GlassCard>
           <GlassCard>
             <SectionTitle title="Guard Decision Timeline" />
-            <PlaceholderPanel className="h-24" />
+            <div className="flex h-24 items-center gap-2">
+              {chunkTrace.map((chunk) => (
+                <div
+                  key={`${chunk.label}-timeline`}
+                  className={
+                    chunk.verdict === "BLOCKED"
+                      ? "h-3 flex-1 rounded-full bg-shield-blocked"
+                      : "h-3 flex-1 rounded-full bg-shield-hold"
+                  }
+                />
+              ))}
+            </div>
           </GlassCard>
         </div>
       </div>
