@@ -31,6 +31,7 @@ def _build_live_config(policy: Policy) -> types.LiveConnectConfig:
     """Build LiveConnectConfig from our Policy dataclass."""
     return types.LiveConnectConfig(
         response_modalities=["AUDIO"],
+        output_audio_transcription=types.AudioTranscriptionConfig(),
         input_audio_transcription=types.AudioTranscriptionConfig(),
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(

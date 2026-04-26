@@ -158,104 +158,117 @@ async def _handle_gemini(ws, session: ShieldSession, buffer_mgr: BufferManager):
     Phase 2: safe → send clientContent → relay response.
              blocked → send block event.
     """
-    async for msg in session.upstream.receive():
-        sc = msg.server_content
-        if sc is None:
-            continue
+    while True:
+        async for msg in session.upstream.receive():
+            sc = msg.server_content
+            if sc is None:
+                continue
 
-        # --- Phase 1: inputTranscription → classify ---
-        if sc.input_transcription and sc.input_transcription.text:
-            transcript = sc.input_transcription.text
-            logger.info("transcript: %r", transcript[:80])
-            session.transcript_buffer = transcript
-            session.state = SessionState.JUDGING
-
-            await ws.send_json({
-                "type": "transcript",
-                "seq": session.next_seq(),
-                "text": transcript,
-                "final": True,
-            })
-
-            session.pending_verdict = asyncio.create_task(
-                buffer_mgr.classify(session, transcript)
-            )
-
-        # --- Phase 1: auto-response modelTurn → discard ---
-        if sc.model_turn and session.state in (SessionState.RELAYING, SessionState.JUDGING):
-            pass
-
-        # --- Phase 1 end: turnComplete → Phase 2 ---
-        if sc.turn_complete and session.state in (SessionState.RELAYING, SessionState.JUDGING):
-            decision = None
-            if session.pending_verdict:
-                decision = await session.pending_verdict
-
-            if decision and decision.action == Action.BLOCK:
-                session.state = SessionState.BLOCKED
-                session.blocked_turns += 1
-                logger.info("BLOCK: score=%.3f reason=%s", decision.score, decision.reason)
+            # --- Phase 1: inputTranscription → classify ---
+            if sc.input_transcription and sc.input_transcription.text:
+                transcript = sc.input_transcription.text
+                logger.info("transcript: %r", transcript[:80])
+                session.transcript_buffer = transcript
+                session.state = SessionState.JUDGING
 
                 await ws.send_json({
-                    "type": "blocked",
+                    "type": "transcript",
                     "seq": session.next_seq(),
-                    "verdict": "BLOCKED",
-                    "action": "BLOCKED",
-                    "score": decision.score,
-                    "reason": decision.reason,
-                    "upstream": decision.verdict.layer if decision.verdict else "unknown",
-                })
-                session.reset_turn()
-
-            elif session.transcript_buffer:
-                session.state = SessionState.SAFE
-                logger.info("ALLOW: sending transcript as clientContent")
-
-                await ws.send_json({
-                    "type": "decision",
-                    "seq": session.next_seq(),
-                    "verdict": "SAFE",
-                    "action": "SAFE",
-                    "score": decision.score if decision else 0.0,
+                    "text": transcript,
+                    "final": True,
                 })
 
-                await session.upstream.send_client_content(
-                    turns=[types.Content(
-                        role="user",
-                        parts=[types.Part(text=session.transcript_buffer)],
-                    )],
-                    turn_complete=True,
+                session.pending_verdict = asyncio.create_task(
+                    buffer_mgr.classify(session, transcript)
                 )
-            else:
-                session.reset_turn()
-            continue
 
-        # --- Phase 2: relay clientContent response ---
-        if sc.model_turn and session.state == SessionState.SAFE:
-            for part in sc.model_turn.parts or []:
-                if part.text:
+            # --- Phase 1: auto-response modelTurn → discard ---
+            if sc.model_turn and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+                pass
+
+            # --- Phase 1 end: turnComplete → Phase 2 ---
+            if sc.turn_complete and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+                decision = None
+                if session.pending_verdict:
+                    decision = await session.pending_verdict
+
+                if decision and decision.action == Action.BLOCK:
+                    session.state = SessionState.BLOCKED
+                    session.blocked_turns += 1
+                    logger.info("BLOCK: score=%.3f reason=%s", decision.score, decision.reason)
+
+                    await ws.send_json({
+                        "type": "blocked",
+                        "seq": session.next_seq(),
+                        "verdict": "BLOCKED",
+                        "action": "BLOCKED",
+                        "score": decision.score,
+                        "reason": decision.reason,
+                        "upstream": decision.verdict.layer if decision.verdict else "unknown",
+                    })
+                    session.reset_turn()
+
+                elif session.transcript_buffer:
+                    session.state = SessionState.SAFE
+                    logger.info("ALLOW: sending transcript as clientContent")
+
+                    await ws.send_json({
+                        "type": "decision",
+                        "seq": session.next_seq(),
+                        "verdict": "SAFE",
+                        "action": "SAFE",
+                        "score": decision.score if decision else 0.0,
+                    })
+
+                    await session.upstream.send_client_content(
+                        turns=[types.Content(
+                            role="user",
+                            parts=[types.Part(text=session.transcript_buffer)],
+                        )],
+                        turn_complete=True,
+                    )
+                else:
+                    session.reset_turn()
+                # break inner loop to call receive() again for Phase 2
+                break
+
+            # --- Phase 2: output transcription → relay as text ---
+            if hasattr(sc, 'output_transcription') and sc.output_transcription and session.state == SessionState.SAFE:
+                text = sc.output_transcription.text if hasattr(sc.output_transcription, 'text') else str(sc.output_transcription)
+                if text:
                     await ws.send_json({
                         "type": "response_text",
                         "seq": session.next_seq(),
-                        "delta": part.text,
+                        "delta": text,
                         "final": False,
                     })
-                if part.inline_data and part.inline_data.data:
-                    await ws.send_bytes(part.inline_data.data)
 
-        # --- Phase 2: response turnComplete ---
-        if sc.turn_complete and session.state == SessionState.SAFE:
-            logger.info("response turn complete (total=%d, blocked=%d)",
-                        session.total_turns, session.blocked_turns)
-            await ws.send_json({
-                "type": "response_text",
-                "seq": session.next_seq(),
-                "final": True,
-            })
-            session.reset_turn()
+            # --- Phase 2: relay clientContent response ---
+            if sc.model_turn and session.state == SessionState.SAFE:
+                for part in sc.model_turn.parts or []:
+                    if part.text:
+                        await ws.send_json({
+                            "type": "response_text",
+                            "seq": session.next_seq(),
+                            "delta": part.text,
+                            "final": False,
+                        })
+                    if part.inline_data and part.inline_data.data:
+                        await ws.send_bytes(part.inline_data.data)
 
-        if sc.turn_complete and session.state == SessionState.BLOCKED:
-            session.reset_turn()
+            # --- Phase 2: response turnComplete ---
+            if sc.turn_complete and session.state == SessionState.SAFE:
+                logger.info("response turn complete (total=%d, blocked=%d)",
+                            session.total_turns, session.blocked_turns)
+                await ws.send_json({
+                    "type": "response_text",
+                    "seq": session.next_seq(),
+                    "final": True,
+                })
+                session.reset_turn()
+
+            if sc.turn_complete and session.state == SessionState.BLOCKED:
+                session.reset_turn()
 
         if sc.interrupted:
             logger.info("interrupted")
