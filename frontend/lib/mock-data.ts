@@ -276,13 +276,34 @@ export const chunkTraceByEvent: Record<string, ChunkTrace[]> = {
 };
 
 export const architectureNodes = [
-  "Client / Demo UI",
-  "WebSocket Proxy",
-  "Rolling Buffer",
-  "Normalizer",
-  "Local Classifier",
-  "Policy Engine",
-  "Gemini Live API",
+  {
+    title: "Client / Demo UI",
+    description: "text chunks, scenarios, browser stream",
+  },
+  {
+    title: "WebSocket Proxy",
+    description: "intercepts inbound stream",
+  },
+  {
+    title: "Rolling Buffer",
+    description: "holds context across chunks",
+  },
+  {
+    title: "Normalizer",
+    description: "unicode, spacing, obfuscation cleanup",
+  },
+  {
+    title: "Local Classifier",
+    description: "Prompt Guard 2 86M, local inference",
+  },
+  {
+    title: "Policy Engine",
+    description: "safe / hold / blocked",
+  },
+  {
+    title: "Gemini Live API",
+    description: "only safe chunks forwarded",
+  },
 ];
 
 export const observabilityOutputs = [
@@ -290,4 +311,22 @@ export const observabilityOutputs = [
   "Block Log",
   "Metrics",
   "Attack Playground",
+];
+
+export const architectureBranches = [
+  {
+    title: "Blocked Branch",
+    path: "Policy Engine -> Block + Warning -> Blocked before Gemini",
+    tone: "blocked",
+  },
+  {
+    title: "Telemetry Branch",
+    path: "Guard Decision -> Event Log -> Metrics Dashboard",
+    tone: "info",
+  },
+  {
+    title: "Safe Branch",
+    path: "ALLOW -> Forward safe prefix -> Gemini Live API",
+    tone: "safe",
+  },
 ];
