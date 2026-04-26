@@ -1,0 +1,23 @@
+policy_id: hospital
+extends: default
+language: ["ko", "en"]
+
+thresholds:
+  safe: 0.30          # tighter for healthcare
+  block: 0.60
+
+rules:
+  block_phrases:
+    - "ignore previous instructions"
+    - "이전 지시.*무시"
+    - "send.*(record|patient|chart).*to"
+    - "환자.*기록.*외부"
+  block_external_dest:
+    - "@gmail.com"
+    - "@outlook.com"
+    - "@yahoo.com"
+    - "attacker.*"
+
+domain:
+  pii_categories: ["SSN", "MRN", "DOB", "주민등록번호", "환자번호"]
+  hipaa_strict: true

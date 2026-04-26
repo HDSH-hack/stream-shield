@@ -1,0 +1,44 @@
+policy_id: default
+language: ["ko", "en"]
+
+thresholds:
+  safe: 0.35
+  block: 0.70
+  judge_band: [0.35, 0.70]
+
+buffer:
+  min_chars: 48
+  overlap_chars: 128
+  scan_interval_ms: 150
+  response_buffer_ms: 100
+
+guard:
+  primary_model: meta-llama/Llama-Prompt-Guard-2-86M
+  runtime: transformers       # transformers | onnx
+  max_length: 512
+  l2_judge:
+    enabled: false
+    model: google/gemma-2-2b-it
+
+rules:
+  block_phrases:
+    - "ignore previous instructions"
+    - "disregard everything above"
+    - "이전 지시.*무시"
+    - "이전 메시지.*무시"
+    - "system prompt"
+    - "reveal.*(system|prompt|secret)"
+  zero_width_drop: true
+  role_spoof_regex:
+    - "<\\|im_start\\|>"
+    - "^system:"
+    - "<system>"
+
+domain:
+  block_external_dest: []
+  pii_categories: []
+
+receipt:
+  enabled: false
+  sign_alg: ed25519
+  signing_key_path: ./.secrets/ed25519.key
