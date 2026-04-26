@@ -93,6 +93,27 @@ const PlaygroundPage = () => {
       return;
     }
 
+    if (event.type === "session_started") {
+      setConnectionState("connected");
+      pushBackendEvent({
+        label: "session started",
+        detail: `${event.session_id} · ${event.policy_id}`,
+        tone: "safe",
+      });
+      return;
+    }
+
+    if (event.type === "error") {
+      setConnectionState("error");
+      setAudioStatus("error");
+      pushBackendEvent({
+        label: "backend error",
+        detail: event.message,
+        tone: "blocked",
+      });
+      return;
+    }
+
     if (event.type === "decision" || event.type === "blocked") {
       const seq = event.seq ?? audioChunkCount;
       const verdict = event.verdict ?? event.action ?? "HOLD";
@@ -132,6 +153,13 @@ const PlaygroundPage = () => {
     if (event.type === "model_response" || event.type === "response_text") {
       const responseText = event.text ?? event.delta ?? "";
       if (!responseText) {
+        if (event.final) {
+          pushBackendEvent({
+            label: "response complete",
+            detail: "Gemini turn completed",
+            tone: "neutral",
+          });
+        }
         return;
       }
       setModelResponseText((current) =>
@@ -140,6 +168,21 @@ const PlaygroundPage = () => {
       pushBackendEvent({
         label: event.final ? "model response" : "response delta",
         detail: responseText,
+        tone: "neutral",
+      });
+      return;
+    }
+
+    if (event.type === "response_audio") {
+      const byteEstimate = event.data
+        ? Math.round((event.data.length * 3) / 4)
+        : 0;
+      pushBackendEvent({
+        label: event.final ? "audio complete" : "audio response",
+        detail:
+          byteEstimate > 0
+            ? `${byteEstimate} bytes · ${event.mimeType ?? event.format ?? "audio"}`
+            : event.mimeType ?? event.format ?? "audio chunk",
         tone: "neutral",
       });
     }
@@ -245,7 +288,19 @@ const PlaygroundPage = () => {
     socket.onmessage = (event) => {
       if (typeof event.data === "string") {
         handleBackendMessage(event.data);
+        return;
       }
+      const size =
+        event.data instanceof Blob
+          ? event.data.size
+          : event.data instanceof ArrayBuffer
+            ? event.data.byteLength
+            : 0;
+      pushBackendEvent({
+        label: "binary audio",
+        detail: `${size} bytes`,
+        tone: "neutral",
+      });
     };
 
     socket.onerror = () => {
@@ -259,7 +314,7 @@ const PlaygroundPage = () => {
       window.clearTimeout(fallbackTimer);
       setAudioStatus((current) => (current === "error" ? "error" : "stopped"));
       setConnectionState((current) =>
-        current === "connected" ? "connected" : "fallback",
+        current === "connected" || current === "error" ? current : "fallback",
       );
     };
   };

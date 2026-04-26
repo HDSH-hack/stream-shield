@@ -23,7 +23,8 @@ ws://127.0.0.1:8000/ws/demo-session?policy=default
 
 Backend should accept one WebSocket connection per active browser mic stream.
 The frontend currently sends JSON messages only, including audio chunks as
-base64 encoded PCM. It does not send binary frames yet.
+base64 encoded PCM. Backend should also broadcast audio responses as JSON
+`response_audio` events instead of binary frames for the demo UI.
 
 ## Frontend -> Backend
 
@@ -75,6 +76,47 @@ Expected backend behavior:
 ## Backend -> Frontend
 
 Frontend accepts these event types. Unknown event types are ignored.
+
+### Session Started Event
+
+Sent after the backend accepts the socket, loads policy, warms the guard, and
+opens the Gemini Live session.
+
+```ts
+type ShieldSessionStartedEvent = {
+  type: "session_started";
+  session_id: string;
+  policy_id: string;
+};
+```
+
+Example:
+
+```json
+{
+  "type": "session_started",
+  "session_id": "demo-session",
+  "policy_id": "default"
+}
+```
+
+### Error Event
+
+```ts
+type ShieldErrorEvent = {
+  type: "error";
+  message: string;
+};
+```
+
+Example:
+
+```json
+{
+  "type": "error",
+  "message": "GEMINI_API_KEY not set"
+}
+```
 
 ### Decision Event
 
@@ -178,6 +220,33 @@ Example:
 }
 ```
 
+### Audio Response Event
+
+Used when Gemini Live emits an audio part. The backend base64-encodes the audio
+so the frontend event stream remains JSON-only.
+
+```ts
+type ShieldAudioResponseEvent = {
+  type: "response_audio";
+  seq?: number;
+  mimeType?: string;
+  data?: string;
+  final?: boolean;
+};
+```
+
+Example:
+
+```json
+{
+  "type": "response_audio",
+  "seq": 23,
+  "mimeType": "audio/pcm;rate=24000",
+  "data": "AAABAAIA...",
+  "final": false
+}
+```
+
 ## Connection Lifecycle
 
 Current frontend behavior:
@@ -209,8 +278,11 @@ Timeout / fallback:
 - [ ] Accept `GET /ws/{sessionId}?policy={policy}` as a WebSocket endpoint.
 - [ ] Parse JSON text frames.
 - [ ] Handle `realtimeInput.audio` base64 PCM16 chunks.
+- [ ] Broadcast `session_started` after Gemini Live is ready.
+- [ ] Broadcast `error` for recoverable setup or protocol failures.
 - [ ] Broadcast `transcript` or `input_transcript`.
 - [ ] Broadcast `model_response` or `response_text`.
+- [ ] Broadcast `response_audio` for Gemini audio chunks.
 - [ ] Broadcast `decision` or `blocked`.
 - [ ] Keep `seq` aligned where possible for UI correlation.
 

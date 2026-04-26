@@ -17,6 +17,17 @@ export type ShieldDecisionEvent = {
   upstream?: string;
 };
 
+export type ShieldSessionStartedEvent = {
+  type: "session_started";
+  session_id: string;
+  policy_id: string;
+};
+
+export type ShieldErrorEvent = {
+  type: "error";
+  message: string;
+};
+
 export type ShieldTranscriptEvent = {
   type: "transcript" | "input_transcript";
   seq?: number;
@@ -32,10 +43,22 @@ export type ShieldModelResponseEvent = {
   final?: boolean;
 };
 
+export type ShieldAudioResponseEvent = {
+  type: "response_audio";
+  seq?: number;
+  mimeType?: string;
+  format?: string;
+  data?: string;
+  final?: boolean;
+};
+
 export type ShieldServerEvent =
   | ShieldDecisionEvent
+  | ShieldSessionStartedEvent
+  | ShieldErrorEvent
   | ShieldTranscriptEvent
-  | ShieldModelResponseEvent;
+  | ShieldModelResponseEvent
+  | ShieldAudioResponseEvent;
 
 export type ShieldAudioChunkMessage = {
   type: "realtimeInput.audio";
@@ -59,10 +82,13 @@ export const parseShieldEvent = (raw: string): ShieldServerEvent | null => {
     if (
       parsed.type === "decision" ||
       parsed.type === "blocked" ||
+      parsed.type === "session_started" ||
+      parsed.type === "error" ||
       parsed.type === "transcript" ||
       parsed.type === "input_transcript" ||
       parsed.type === "model_response" ||
-      parsed.type === "response_text"
+      parsed.type === "response_text" ||
+      parsed.type === "response_audio"
     ) {
       return parsed as ShieldServerEvent;
     }

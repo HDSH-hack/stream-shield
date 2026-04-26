@@ -260,14 +260,20 @@ class ResponseBuffer:
         if self.state == "BUFFERING":
             self.queue.append(chunk)
         elif self.state == "FLUSHING":
-            await self.client_ws.send_bytes(chunk)  # 직접 중계
+            await self.client_ws.send_json({
+                "type": "response_audio",
+                "data": base64.b64encode(chunk).decode("ascii"),
+            })
         # DROPPED → 그대로 폐기
 
     async def on_verdict(self, verdict):
         if verdict.score < self.policy.block_threshold:
-            # safe → 누적분 flush 후 직접 중계 모드
+            # safe → 누적분 flush 후 JSON response_audio 중계 모드
             for chunk in self.queue:
-                await self.client_ws.send_bytes(chunk)
+                await self.client_ws.send_json({
+                    "type": "response_audio",
+                    "data": base64.b64encode(chunk).decode("ascii"),
+                })
             self.queue.clear()
             self.state = "FLUSHING"
         else:
@@ -369,7 +375,7 @@ receipt:
 ### 4.1 스택
 - **Next.js App Router + React** (TypeScript). Vercel 호스팅.
 - **Web Audio API** + AudioWorklet — 16kHz PCM mono, 200–500ms 청크.
-- **WebSocket client** — binary audio + JSON control 두 채널.
+- **WebSocket client** — JSON event stream. Audio chunks are base64 PCM16.
 - **shadcn/ui** + Tailwind — 빠른 UI.
 
 ### 4.2 페이지 구조 (Gihwang's mockups: `design-gihwang/page-home.png`, `page-dashboard.png`)
@@ -615,14 +621,14 @@ async def run_evaluation():
 ### Phase 1 (1–3h) — Backend 핵심
 - WebSocket 프록시 (양방향 릴레이).
 - Session Manager (`ShieldSession` dataclass).
-- Buffer Manager (Hold→Scan→Release for text, Response Buffer for audio response).
+- Buffer Manager (transcript classification + Response Buffer for audio response).
 - L0 rule pass + Normalizer.
 - L1 Prompt Guard 2 86M 로딩 + ONNX 변환 (시간 되면).
 
 ### Phase 2 (3–5h) — Frontend + 통합
 - Home 페이지 (Start 버튼, mic permission).
 - Dashboard 페이지 (3 pane).
-- WebSocket client (binary audio + JSON control).
+- WebSocket client (JSON event stream with base64 PCM16 audio).
 - TTS audio playback.
 - Mock data 로 Dashboard 단독 동작 → 실제 backend 연결.
 
