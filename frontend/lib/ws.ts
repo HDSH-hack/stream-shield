@@ -17,12 +17,41 @@ export type ShieldDecisionEvent = {
   upstream?: string;
 };
 
+export type ShieldTranscriptEvent = {
+  type: "transcript" | "input_transcript";
+  seq?: number;
+  text: string;
+  final?: boolean;
+};
+
+export type ShieldModelResponseEvent = {
+  type: "model_response" | "response_text";
+  seq?: number;
+  text?: string;
+  delta?: string;
+  final?: boolean;
+};
+
+export type ShieldServerEvent =
+  | ShieldDecisionEvent
+  | ShieldTranscriptEvent
+  | ShieldModelResponseEvent;
+
 export type ShieldTextChunkMessage = {
   type: "realtimeInput.text";
   sessionId: string;
   scenario: string;
   seq: number;
   text: string;
+};
+
+export type ShieldAudioChunkMessage = {
+  type: "realtimeInput.audio";
+  sessionId: string;
+  seq: number;
+  mimeType: "audio/pcm;rate=16000";
+  sampleRate: 16000;
+  data: string;
 };
 
 export const getShieldWsUrl = (sessionId: string, policy = "default") => {
@@ -39,6 +68,25 @@ export const parseShieldDecision = (raw: string): ShieldDecisionEvent | null => 
       return null;
     }
     return parsed as ShieldDecisionEvent;
+  } catch {
+    return null;
+  }
+};
+
+export const parseShieldEvent = (raw: string): ShieldServerEvent | null => {
+  try {
+    const parsed = JSON.parse(raw) as Partial<ShieldServerEvent>;
+    if (
+      parsed.type === "decision" ||
+      parsed.type === "blocked" ||
+      parsed.type === "transcript" ||
+      parsed.type === "input_transcript" ||
+      parsed.type === "model_response" ||
+      parsed.type === "response_text"
+    ) {
+      return parsed as ShieldServerEvent;
+    }
+    return null;
   } catch {
     return null;
   }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Mic, RotateCcw, Play, Wifi } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Mic, Play, Radio, RotateCcw, Square, Wifi } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -17,18 +17,31 @@ import {
   type Verdict,
 } from "@/lib/mock-data";
 import {
+  createPcm16MicRecorder,
+  type MicRecorder,
+  type PcmAudioChunk,
+} from "@/lib/audio/recorder";
+import {
   getShieldWsUrl,
-  parseShieldDecision,
+  parseShieldEvent,
+  type ShieldAudioChunkMessage,
   type ShieldConnectionState,
   type ShieldTextChunkMessage,
 } from "@/lib/ws";
 
 type MicStatus = "idle" | "requesting" | "granted" | "denied";
+type AudioStatus = "idle" | "starting" | "streaming" | "stopped" | "error";
 
 type DisplayDecision = {
   verdict: Verdict;
   score: number;
   source: "backend" | "fallback";
+};
+
+type BackendEventRow = {
+  label: string;
+  detail: string;
+  tone: "safe" | "hold" | "blocked" | "neutral";
 };
 
 const sessionId = "demo-session";
@@ -62,6 +75,13 @@ const PlaygroundPage = () => {
   const [decisions, setDecisions] = useState<Record<number, DisplayDecision>>(
     {},
   );
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>("idle");
+  const [audioChunkCount, setAudioChunkCount] = useState(0);
+  const [transcriptText, setTranscriptText] = useState("");
+  const [modelResponseText, setModelResponseText] = useState("");
+  const [backendEvents, setBackendEvents] = useState<BackendEventRow[]>([]);
+  const audioSocketRef = useRef<WebSocket | null>(null);
+  const recorderRef = useRef<MicRecorder | null>(null);
 
   const selectedScenario = attackScenarios[selectedIndex];
   const selectedChunks = useMemo(() => {
@@ -87,6 +107,75 @@ const PlaygroundPage = () => {
     }, 500);
     return () => window.clearTimeout(id);
   }, [activeStep, isRunning, selectedChunks.length]);
+
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      audioSocketRef.current?.close();
+    };
+  }, []);
+
+  const pushBackendEvent = (event: BackendEventRow) => {
+    setBackendEvents((current) => [event, ...current].slice(0, 6));
+  };
+
+  const handleBackendMessage = (raw: string) => {
+    const event = parseShieldEvent(raw);
+    if (!event) {
+      return;
+    }
+
+    if (event.type === "decision" || event.type === "blocked") {
+      const seq = event.seq ?? selectedChunks.length - 1;
+      const verdict = event.verdict ?? event.action ?? "HOLD";
+      setDecisions((current) => ({
+        ...current,
+        [seq]: {
+          verdict,
+          score: event.score ?? 0,
+          source: "backend",
+        },
+      }));
+      pushBackendEvent({
+        label: `decision:${seq}`,
+        detail: `${verdict} ${event.reason ? `- ${event.reason}` : ""}`,
+        tone:
+          verdict === "BLOCKED"
+            ? "blocked"
+            : verdict === "HOLD"
+              ? "hold"
+              : "safe",
+      });
+      return;
+    }
+
+    if (event.type === "transcript" || event.type === "input_transcript") {
+      setTranscriptText((current) =>
+        event.final ? `${current} ${event.text}`.trim() : event.text,
+      );
+      pushBackendEvent({
+        label: event.final ? "final transcript" : "partial transcript",
+        detail: event.text,
+        tone: "neutral",
+      });
+      return;
+    }
+
+    if (event.type === "model_response" || event.type === "response_text") {
+      const responseText = event.text ?? event.delta ?? "";
+      if (!responseText) {
+        return;
+      }
+      setModelResponseText((current) =>
+        event.final ? responseText : `${current}${responseText}`,
+      );
+      pushBackendEvent({
+        label: event.final ? "model response" : "response delta",
+        detail: responseText,
+        tone: "neutral",
+      });
+    }
+  };
 
   const requestMicrophone = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -140,23 +229,9 @@ const PlaygroundPage = () => {
     };
 
     socket.onmessage = (event) => {
-      if (typeof event.data !== "string") {
-        return;
+      if (typeof event.data === "string") {
+        handleBackendMessage(event.data);
       }
-      const decision = parseShieldDecision(event.data);
-      if (!decision) {
-        return;
-      }
-      const seq = decision.seq ?? selectedChunks.length - 1;
-      const verdict = decision.verdict ?? decision.action ?? "HOLD";
-      setDecisions((current) => ({
-        ...current,
-        [seq]: {
-          verdict,
-          score: decision.score ?? 0,
-          source: "backend",
-        },
-      }));
     };
 
     socket.onerror = () => {
@@ -174,9 +249,17 @@ const PlaygroundPage = () => {
   };
 
   const resetSimulation = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    audioSocketRef.current?.close();
+    audioSocketRef.current = null;
     setIsRunning(false);
     setActiveStep(0);
     setDecisions({});
+    setTranscriptText("");
+    setModelResponseText("");
+    setBackendEvents([]);
+    setAudioChunkCount(0);
     setConnectionState("idle");
   };
 
@@ -188,6 +271,103 @@ const PlaygroundPage = () => {
     setActiveStep(0);
     setIsRunning(true);
     sendChunksToBackend();
+  };
+
+  const sendAudioChunk = (chunk: PcmAudioChunk) => {
+    const socket = audioSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const message: ShieldAudioChunkMessage = {
+      type: "realtimeInput.audio",
+      sessionId,
+      seq: chunk.seq,
+      mimeType: chunk.mimeType,
+      sampleRate: 16000,
+      data: chunk.data,
+    };
+    socket.send(JSON.stringify(message));
+    setAudioChunkCount(chunk.seq + 1);
+  };
+
+  const startAudioStream = () => {
+    if (audioStatus === "starting" || audioStatus === "streaming") {
+      return;
+    }
+
+    const wsUrl = getShieldWsUrl(sessionId);
+    setAudioStatus("starting");
+    setConnectionState("connecting");
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch {
+      setAudioStatus("error");
+      setConnectionState("fallback");
+      return;
+    }
+
+    audioSocketRef.current = socket;
+    const fallbackTimer = window.setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        setAudioStatus("error");
+        setConnectionState("fallback");
+        socket.close();
+      }
+    }, 1200);
+
+    socket.onopen = async () => {
+      window.clearTimeout(fallbackTimer);
+      setConnectionState("connected");
+      try {
+        const recorder = await createPcm16MicRecorder({
+          onChunk: sendAudioChunk,
+        });
+        recorderRef.current = recorder;
+        setMicStatus("granted");
+        setAudioStatus("streaming");
+        pushBackendEvent({
+          label: "audio uplink",
+          detail: "sending 16kHz PCM chunks to backend",
+          tone: "safe",
+        });
+      } catch {
+        setMicStatus("denied");
+        setAudioStatus("error");
+        socket.close();
+      }
+    };
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === "string") {
+        handleBackendMessage(event.data);
+      }
+    };
+
+    socket.onerror = () => {
+      window.clearTimeout(fallbackTimer);
+      setAudioStatus("error");
+      setConnectionState("fallback");
+      socket.close();
+    };
+
+    socket.onclose = () => {
+      window.clearTimeout(fallbackTimer);
+      setAudioStatus((current) => (current === "error" ? "error" : "stopped"));
+      setConnectionState((current) =>
+        current === "connected" ? "connected" : "fallback",
+      );
+    };
+  };
+
+  const stopAudioStream = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    audioSocketRef.current?.close();
+    audioSocketRef.current = null;
+    setAudioStatus("stopped");
   };
 
   return (
@@ -295,6 +475,30 @@ const PlaygroundPage = () => {
               </button>
               <button
                 type="button"
+                onClick={startAudioStream}
+                disabled={
+                  audioStatus === "starting" || audioStatus === "streaming"
+                }
+                className="inline-flex items-center gap-2 rounded-xl border border-shield-cyan/30 bg-shield-cyan/10 px-4 py-2 text-sm font-semibold text-shield-cyan transition hover:bg-shield-cyan/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Radio size={15} />
+                {audioStatus === "streaming"
+                  ? "Audio Streaming"
+                  : audioStatus === "starting"
+                    ? "Starting Audio"
+                    : "Start Mic Stream"}
+              </button>
+              <button
+                type="button"
+                onClick={stopAudioStream}
+                disabled={audioStatus !== "streaming"}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Square size={15} />
+                Stop Stream
+              </button>
+              <button
+                type="button"
                 onClick={resetSimulation}
                 className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
               >
@@ -302,7 +506,7 @@ const PlaygroundPage = () => {
                 Reset Scenario
               </button>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-shield-muted">
                 <span className="mb-1 flex items-center gap-2 text-white">
                   <Mic size={13} />
@@ -321,6 +525,66 @@ const PlaygroundPage = () => {
                     ? "fallback decisions active"
                     : connectionState}
               </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-shield-muted">
+                <span className="mb-1 flex items-center gap-2 text-white">
+                  <Radio size={13} />
+                  Audio chunks
+                </span>
+                {audioStatus} · {audioChunkCount} sent
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <SectionTitle
+              title="Backend Broadcast"
+              description="Live transcript, model response, and guard decisions."
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-shield-muted">
+                  Transcript
+                </p>
+                <p className="mt-3 min-h-16 text-sm leading-6 text-white">
+                  {transcriptText || "Waiting for backend transcript events."}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-shield-muted">
+                  Model Response
+                </p>
+                <p className="mt-3 min-h-16 text-sm leading-6 text-white">
+                  {modelResponseText ||
+                    "Waiting for Gemini Live response events."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {backendEvents.length > 0 ? (
+                backendEvents.map((event, index) => (
+                  <div
+                    key={`${event.label}-${index}`}
+                    className={
+                      event.tone === "blocked"
+                        ? "rounded-xl border border-shield-blocked/25 bg-shield-blocked/10 p-3 text-xs text-shield-blocked"
+                        : event.tone === "hold"
+                          ? "rounded-xl border border-shield-hold/25 bg-shield-hold/10 p-3 text-xs text-shield-hold"
+                          : event.tone === "safe"
+                            ? "rounded-xl border border-shield-safe/20 bg-shield-safe/10 p-3 text-xs text-shield-safe"
+                            : "rounded-xl border border-white/10 bg-white/[0.025] p-3 text-xs text-shield-muted"
+                    }
+                  >
+                    <span className="mr-2 font-semibold text-white">
+                      {event.label}
+                    </span>
+                    {event.detail}
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3 text-xs text-shield-muted">
+                  Backend events will appear here after WebSocket broadcast.
+                </div>
+              )}
             </div>
           </GlassCard>
 
@@ -343,26 +607,26 @@ const PlaygroundPage = () => {
                       )
                     : null);
                 return (
-                <div
-                  key={chunk}
-                  className={
-                    isBlocked
-                      ? "min-h-20 rounded-xl border border-shield-blocked/30 bg-shield-blocked/10 p-3 font-mono text-xs text-shield-blocked shadow-[0_0_24px_rgba(251,113,133,0.12)]"
-                      : isSeen
-                        ? "min-h-20 rounded-xl border border-shield-cyan/30 bg-shield-cyan/10 p-3 font-mono text-xs text-shield-cyan"
-                        : "min-h-20 rounded-xl border border-white/10 bg-white/[0.025] p-3 font-mono text-xs text-shield-muted"
-                  }
-                >
-                  <span className="mb-2 block text-[10px] uppercase tracking-[0.14em] opacity-70">
-                    chunk {index + 1}
-                  </span>
-                  {chunk}
-                  {decision ? (
-                    <span className="mt-3 block text-[10px] uppercase tracking-[0.14em] opacity-80">
-                      {decision.source} · {decision.verdict}
+                  <div
+                    key={`${chunk}-${index}`}
+                    className={
+                      isBlocked
+                        ? "min-h-20 rounded-xl border border-shield-blocked/30 bg-shield-blocked/10 p-3 font-mono text-xs text-shield-blocked shadow-[0_0_24px_rgba(251,113,133,0.12)]"
+                        : isSeen
+                          ? "min-h-20 rounded-xl border border-shield-cyan/30 bg-shield-cyan/10 p-3 font-mono text-xs text-shield-cyan"
+                          : "min-h-20 rounded-xl border border-white/10 bg-white/[0.025] p-3 font-mono text-xs text-shield-muted"
+                    }
+                  >
+                    <span className="mb-2 block text-[10px] uppercase tracking-[0.14em] opacity-70">
+                      chunk {index + 1}
                     </span>
-                  ) : null}
-                </div>
+                    {chunk}
+                    {decision ? (
+                      <span className="mt-3 block text-[10px] uppercase tracking-[0.14em] opacity-80">
+                        {decision.source} · {decision.verdict}
+                      </span>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
@@ -372,7 +636,8 @@ const PlaygroundPage = () => {
             <SectionTitle title="Expected Guard Behavior" />
             <div className="grid gap-3 md:grid-cols-3">
               {expectedGuardBehavior.map((item, index) => {
-                const active = index <= Math.min(activeStep, expectedGuardBehavior.length - 1);
+                const active =
+                  index <= Math.min(activeStep, expectedGuardBehavior.length - 1);
                 const liveDecision =
                   decisions[index] ??
                   (active
@@ -383,22 +648,22 @@ const PlaygroundPage = () => {
                       )
                     : item);
                 return (
-                <div
-                  key={`${item.verdict}-${item.score}`}
-                  className={
-                    active
-                      ? "rounded-xl border border-white/15 bg-white/[0.06] p-4"
-                      : "rounded-xl border border-white/10 bg-white/[0.025] p-4 opacity-50"
-                  }
-                >
-                  <StatusBadge verdict={liveDecision.verdict} />
-                  <p className="mt-3 font-mono text-sm text-white">
-                    score {liveDecision.score.toFixed(2)}
-                  </p>
-                  <p className="mt-1 text-xs text-shield-muted">
-                    {liveDecision.source ?? "expected"}
-                  </p>
-                </div>
+                  <div
+                    key={`${item.verdict}-${item.score}`}
+                    className={
+                      active
+                        ? "rounded-xl border border-white/15 bg-white/[0.06] p-4"
+                        : "rounded-xl border border-white/10 bg-white/[0.025] p-4 opacity-50"
+                    }
+                  >
+                    <StatusBadge verdict={liveDecision.verdict} />
+                    <p className="mt-3 font-mono text-sm text-white">
+                      score {liveDecision.score.toFixed(2)}
+                    </p>
+                    <p className="mt-1 text-xs text-shield-muted">
+                      {liveDecision.source ?? "expected"}
+                    </p>
+                  </div>
                 );
               })}
             </div>
