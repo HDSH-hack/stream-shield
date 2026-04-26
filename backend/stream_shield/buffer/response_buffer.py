@@ -45,6 +45,12 @@ class ResponseBuffer:
         logger.info("response buffer: FLUSH (%d chunks)", len(chunks))
         return chunks
 
+    def drain(self) -> list[dict]:
+        """Return and clear any remaining buffered chunks (after flush)."""
+        chunks = list(self.queue)
+        self.queue.clear()
+        return chunks
+
     def drop(self) -> None:
         """Mark blocked — discard buffered chunks."""
         dropped = len(self.queue)

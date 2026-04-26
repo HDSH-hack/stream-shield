@@ -1,11 +1,12 @@
 """FastAPI WebSocket server — Stream Shield entry point.
 
-Architecture (hold-and-scan):
-1. Client audio → Proxy → Gemini (auto-VAD, STT only)
-2. Gemini inputTranscription → classifier
-3. Auto-generated modelTurn → always discarded
-4. If safe: send transcript as clientContent → relay new response to client
-5. If blocked: send block notification to client
+Architecture (VAD-respecting parallel pipeline):
+1. Client audio → Proxy → Gemini (auto-VAD does STT + auto-response)
+2. inputTranscription → start classifier in background
+3. Auto-response modelTurn → discard, but let VAD flow complete naturally
+4. Auto-response turnComplete → session clean
+5. If safe: send transcript as clientContent → relay new response to client
+6. If blocked: send block notification
 
 See UNIFIED_DESIGN.md §3 for full architecture.
 """
@@ -25,7 +26,7 @@ from starlette.websockets import WebSocketState
 
 from stream_shield.gemini import connect_gemini
 from stream_shield.guard.engine import GuardEngine
-from stream_shield.guard.decision import Action
+from stream_shield.guard.decision import Action, Decision
 from stream_shield.buffer.manager import BufferManager
 from stream_shield.policy import load_policy
 from stream_shield.session import ShieldSession, SessionState
@@ -36,7 +37,7 @@ app = FastAPI(title="Stream Shield", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,7 +82,7 @@ async def shield_ws(
                 "policy_id": policy_id,
             })
             await asyncio.gather(
-                client_to_gemini(ws, session, buffer_mgr),
+                client_to_gemini(ws, session),
                 gemini_to_client(ws, session, buffer_mgr),
             )
     except WebSocketDisconnect:
@@ -93,10 +94,10 @@ async def shield_ws(
             await ws.close()
 
 
-async def client_to_gemini(ws, session: ShieldSession, buffer_mgr):
+async def client_to_gemini(ws, session: ShieldSession):
     """Browser → backend → Gemini Live.
 
-    Forward audio to Gemini for STT (auto-VAD).
+    Forward audio to Gemini for STT via auto-VAD.
     """
     while True:
         msg = await ws.receive()
@@ -104,7 +105,6 @@ async def client_to_gemini(ws, session: ShieldSession, buffer_mgr):
         if msg.get("type") == "websocket.disconnect":
             break
 
-        # Binary frame → audio PCM, forward to Gemini for STT
         if "bytes" in msg and msg["bytes"]:
             await session.upstream.send_realtime_input(
                 audio=types.Blob(
@@ -113,104 +113,106 @@ async def client_to_gemini(ws, session: ShieldSession, buffer_mgr):
                 ),
             )
 
-        # Text frame → JSON control message
-        elif "text" in msg and msg["text"]:
-            try:
-                data = json.loads(msg["text"])
-            except json.JSONDecodeError:
-                continue
-
-            if data.get("type") == "interrupt":
-                logger.info("client interrupt")
-
 
 async def gemini_to_client(ws, session: ShieldSession, buffer_mgr: BufferManager):
     """Gemini Live → backend → browser.
 
-    Flow per turn:
-    1. Receive inputTranscription (STT) from auto-VAD
-    2. Discard auto-generated modelTurn (from audio input)
-    3. Classify transcript
-    4. If safe: send transcript as clientContent → relay NEW response
-    5. If blocked: send block notification
+    Per-turn flow (VAD-respecting):
+    Phase 1: Receive auto-VAD events. Classify transcript in background.
+             Discard auto-response. Wait for turnComplete.
+    Phase 2: If safe, send transcript as clientContent and relay response.
+             If blocked, send block notification.
     """
     async for msg in session.upstream.receive():
         sc = msg.server_content
         if sc is None:
             continue
 
-        # --- inputTranscription: classify and decide ---
+        # --- Phase 1: inputTranscription → classify ---
         if sc.input_transcription and sc.input_transcription.text:
             transcript = sc.input_transcription.text
             logger.info("transcript: %r", transcript[:80])
-
-            await ws.send_json({
-                "type": "transcript",
-                "text": transcript,
-            })
-
-            # Classify
+            session.transcript_buffer = transcript
             session.state = SessionState.JUDGING
-            decision = await buffer_mgr.classify_transcript(session, transcript)
 
-            if decision.action == Action.ALLOW:
-                # Safe → send transcript to Gemini as text, get response
-                session.state = SessionState.SAFE
-                logger.info("ALLOW (score=%.3f) — sending to Gemini", decision.score)
+            await ws.send_json({"type": "transcript", "text": transcript})
 
-                await ws.send_json({
-                    "type": "decision",
-                    "decision": "ALLOW",
-                    "score": decision.score,
-                })
+            # Start classifier (runs in background during auto-response)
+            session.pending_verdict = asyncio.create_task(
+                buffer_mgr.classify(session, transcript)
+            )
 
-                # Send classified text to Gemini for response generation
-                await session.upstream.send_client_content(
-                    turns=[types.Content(
-                        role="user",
-                        parts=[types.Part(text=transcript)],
-                    )],
-                    turn_complete=True,
-                )
-                # Response will arrive as modelTurn below and be relayed
+        # --- Phase 1: auto-response modelTurn → discard ---
+        if sc.model_turn and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+            pass  # discard auto-response, let VAD flow complete
 
-            else:
-                # Blocked → notify client, skip response
+        # --- Phase 1 end: auto-response turnComplete → Phase 2 ---
+        if sc.turn_complete and session.state in (SessionState.RELAYING, SessionState.JUDGING):
+            # Ensure classifier is done
+            decision = None
+            if session.pending_verdict:
+                decision = await session.pending_verdict
+
+            if decision and decision.action == Action.BLOCK:
+                # BLOCKED
                 session.state = SessionState.BLOCKED
                 session.blocked_turns += 1
-                logger.info("BLOCK (score=%.3f reason=%s)", decision.score, decision.reason)
-
+                logger.info("BLOCK: score=%.3f reason=%s",
+                            decision.score, decision.reason)
                 await ws.send_json({
                     "type": "blocked",
                     "category": "prompt_injection",
                     "score": decision.score,
                     "reason": decision.reason,
                     "layer": decision.verdict.layer if decision.verdict else "unknown",
-                    "transcript": transcript[:200],
+                    "transcript": session.transcript_buffer[:200],
                 })
+                await ws.send_json({
+                    "type": "decision",
+                    "decision": "BLOCK",
+                    "score": decision.score,
+                    "reason": decision.reason,
+                })
+            elif session.transcript_buffer:
+                # SAFE → send transcript as clientContent for response
+                session.state = SessionState.SAFE
+                logger.info("ALLOW: sending transcript as clientContent")
+                await ws.send_json({
+                    "type": "decision",
+                    "decision": "ALLOW",
+                    "score": decision.score if decision else 0.0,
+                })
+                await session.upstream.send_client_content(
+                    turns=[types.Content(
+                        role="user",
+                        parts=[types.Part(text=session.transcript_buffer)],
+                    )],
+                    turn_complete=True,
+                )
+                # Continue receiving — Phase 2 response will arrive as modelTurn
+            else:
+                # No transcript (VAD didn't detect speech)
+                session.reset_turn()
+            continue
 
-        # --- modelTurn: relay only when state is SAFE ---
-        if sc.model_turn and sc.model_turn.parts:
-            if session.state == SessionState.SAFE:
-                for part in sc.model_turn.parts:
-                    if part.inline_data and part.inline_data.data:
-                        await ws.send_bytes(part.inline_data.data)
-                    if part.text:
-                        await ws.send_json({
-                            "type": "response_text",
-                            "delta": part.text,
-                        })
-            # JUDGING / BLOCKED / RELAYING → discard modelTurn
+        # --- Phase 2: relay clientContent response ---
+        if sc.model_turn and session.state == SessionState.SAFE:
+            for part in sc.model_turn.parts or []:
+                if part.inline_data and part.inline_data.data:
+                    await ws.send_bytes(part.inline_data.data)
+                if part.text:
+                    await ws.send_json({"type": "response_text", "delta": part.text})
 
-        # --- turnComplete ---
-        if sc.turn_complete:
-            if session.state == SessionState.SAFE:
-                await ws.send_json({"type": "turn_complete"})
-            logger.info("turn complete (state=%s, total=%d, blocked=%d)",
-                        session.state.value, session.total_turns, session.blocked_turns)
+        # --- Phase 2: response turnComplete ---
+        if sc.turn_complete and session.state == SessionState.SAFE:
+            logger.info("response turn complete (total=%d, blocked=%d)",
+                        session.total_turns, session.blocked_turns)
+            await ws.send_json({"type": "turn_complete"})
             session.reset_turn()
 
-        # --- interrupted ---
+        # --- Phase 2: blocked turn cleanup ---
+        if sc.turn_complete and session.state == SessionState.BLOCKED:
+            session.reset_turn()
+
         if sc.interrupted:
-            logger.info("turn interrupted")
-            session.reset_turn()
+            logger.info("interrupted")

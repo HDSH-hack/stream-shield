@@ -1,10 +1,9 @@
-"""Buffer Manager — classifies transcripts before forwarding to Gemini.
+"""Buffer Manager — classifies transcript during auto-response.
 
-Hold-and-scan architecture:
-1. Receive inputTranscription (STT) from Gemini auto-VAD
-2. Run guard engine (L0 rules → L1 classifier)
-3. Return decision: ALLOW → server sends text to Gemini for response
-                     BLOCK → server drops, notifies client
+Architecture (VAD-respecting):
+- Classifier runs during Gemini's auto-response phase
+- By the time auto-response turnComplete arrives, classifier is done
+- Server decides: safe → send clientContent, blocked → notify client
 
 See UNIFIED_DESIGN.md §3.2.
 """
@@ -26,8 +25,8 @@ class BufferManager:
         self.guard = guard
         self.policy = policy
 
-    async def classify_transcript(self, session: ShieldSession, transcript: str) -> Decision:
-        """Classify transcript and return decision."""
+    async def classify(self, session: ShieldSession, transcript: str) -> Decision:
+        """Classify transcript. Called as background task during auto-response."""
         verdict = await self.guard.classify(transcript)
         session.scores.append(verdict.score)
         session.total_turns += 1
