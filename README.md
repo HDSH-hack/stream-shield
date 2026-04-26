@@ -1,5 +1,7 @@
 # Stream Shield
 
+[![CI](https://github.com/HDSH-hack/stream-shield/actions/workflows/ci.yml/badge.svg)](https://github.com/HDSH-hack/stream-shield/actions/workflows/ci.yml)
+
 Streaming PI (prompt-injection) shield for Gemini Live API.
 Hackathon implementation — 9 hours to working demo.
 
@@ -73,6 +75,26 @@ pnpm dev
 ```
 
 브라우저에서 `http://localhost:5173` 접속 → mic permission → demo.
+
+### Eval / per-entity comparison
+
+```bash
+cd backend
+# Run the full attackset against one policy
+python -m stream_shield.eval.runner --policy default
+python -m stream_shield.eval.runner --policy hospital --json out.json
+
+# Same input → different decisions across policies (the per-entity card)
+python -m stream_shield.eval.compare
+python -m stream_shield.eval.compare --diff-only
+python -m stream_shield.eval.compare --inputs-from datasets/attackset.yaml --diff-only
+
+# Tests
+python -m unittest discover -s tests
+```
+
+See [`docs/eval-analysis.md`](./docs/eval-analysis.md) for current numbers and what they mean,
+and [`docs/limitations.md`](./docs/limitations.md) for explicit non-goals.
 
 ## Contributors
 
