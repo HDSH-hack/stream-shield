@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("poc")
 
-MODEL = "models/gemini-2.0-flash-live-001"
+MODEL = "models/gemini-3.1-flash-live-preview"
 
 
 def generate_pcm_silence(duration_s: float = 0.5, sample_rate: int = 16000) -> bytes:
