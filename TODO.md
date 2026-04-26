@@ -10,7 +10,7 @@
 | **Eunjin (@foura1201)** | Backend core | `server.py`, `buffer/manager.py`, `guard/classifier.py`, `protocol.py`, `gemini.py` |
 | **Gihwang** | Frontend + parallel pipeline | `frontend/src/**`, `buffer/response_buffer.py` (parallel), 다이어그램 / mockup |
 | **Dohoon (@DoHoonKim)** | Guard tiered cascade + eval | `guard/rules.py`, `guard/normalizer.py`, `guard/llm_judge.py`, `policy.py`, `eval/runner.py`, attackset 확장 |
-| **Soowon (@soowonj)** | Comparison + per-entity + receipt + 발표 | `config/policy.*.yaml` (entity 정책), `receipt.py`, `metrics.py`, slides + 30/90초 멘트, eval 분석 |
+| **Soowon (@soowonj)** | Comparison + per-entity + receipt | `config/policy.*.yaml` (entity 정책), `receipt.py`, `metrics.py`, eval 분석 |
 
 ---
 
@@ -100,11 +100,11 @@
 | 작업 | 담당 | 산출물 |
 |---|---|---|
 | README 정리 (스크린샷 / 사용법 / contributor) | Soowon | `README.md` 최종 |
-| 발표 슬라이드 (구조 / vs Gemini 비교 / per-entity / 정량 결과) | Soowon | 슬라이드 8–10 장 |
-| 30초 답안 + 90초 demo 멘트 정리 | Soowon | `docs/pitch.md` |
+| 발표 슬라이드 (구조 / vs Gemini 비교 / per-entity / 정량 결과) | 발표자 | 슬라이드 8–10 장 |
+| 30초 답안 + 90초 demo 멘트 정리 | 발표자 | `docs/pitch.md` |
 | Backup recording (라이브 데모 깨질 경우) | Gihwang | 90초 mp4 |
 | 코드 정리 + 타입 힌트 + lint | 모두 | (틈틈이) |
-| limitations 명시 — non-goals 인 audio-channel 공격 | Soowon | 슬라이드 한 장 |
+| limitations 명시 — non-goals 인 audio-channel 공격 | 발표자 | 슬라이드 한 장 |
 
 ---
 
@@ -145,7 +145,7 @@
 
 ---
 
-## 발표 30초 답안 (Soowon 작성, 모두 외움)
+## 발표 30초 답안 (모두 외움)
 
 > Stream Shield 는 Gemini Live API 앞단의 streaming WAF 입니다.
 > 입력을 chunk 단위로 가로채 layered classifier 로 검사하고, 안전 prefix 만 Gemini 에 전달합니다.
