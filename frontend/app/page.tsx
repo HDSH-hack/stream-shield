@@ -1,25 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
+
+import { AppShell } from "@/components/layout/app-shell";
 
 const Home = () => {
   return (
-    <main className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-6">
-      <nav className="flex items-center justify-between rounded-2xl border border-shield-border/80 bg-shield-panel/70 px-5 py-4 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-shield-cyan/40 bg-shield-cyan/10 text-shield-cyan">
-            <ShieldCheck size={19} />
-          </div>
-          <span className="text-sm font-semibold tracking-wide">Stream Shield</span>
-        </div>
-        <div className="hidden items-center gap-6 text-sm text-shield-muted md:flex">
-          <Link href="/demo">Demo</Link>
-          <Link href="/playground">Playground</Link>
-          <Link href="/metrics">Metrics</Link>
-          <Link href="/architecture">Architecture</Link>
-        </div>
-      </nav>
-
-      <section className="grid flex-1 items-center gap-10 py-16 lg:grid-cols-[1fr_0.88fr]">
+    <AppShell className="flex min-h-[calc(100vh-4rem)] flex-col">
+      <section className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1fr_0.88fr]">
         <div>
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-shield-cyan/30 bg-shield-cyan/10 px-3 py-1 text-xs font-medium text-shield-cyan">
             <Zap size={14} />
@@ -88,7 +75,7 @@ const Home = () => {
           </div>
         </div>
       </section>
-    </main>
+    </AppShell>
   );
 };
 

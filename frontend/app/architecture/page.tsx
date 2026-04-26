@@ -1,11 +1,16 @@
+import { AppShell } from "@/components/layout/app-shell";
+import { PageHeader } from "@/components/layout/page-header";
+
 const ArchitecturePage = () => {
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-10">
-      <p className="text-sm font-medium text-shield-cyan">Architecture</p>
-      <h1 className="mt-3 text-4xl font-bold text-white">
-        Client to proxy to guard to Gemini Live API.
-      </h1>
-    </main>
+    <AppShell>
+      <PageHeader
+        eyebrow="Architecture"
+        title="Client to proxy to guard to Gemini Live API."
+        description="How Stream Shield intercepts, classifies, and blocks malicious input before it reaches Gemini Live API."
+        status="System design"
+      />
+    </AppShell>
   );
 };
 
