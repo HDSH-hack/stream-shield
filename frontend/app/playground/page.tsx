@@ -40,6 +40,7 @@ type BackendEventRow = {
   label: string;
   detail: string;
   tone: "safe" | "hold" | "blocked" | "neutral";
+  timestamp: string;
 };
 
 const sessionId = "demo-session";
@@ -88,8 +89,19 @@ const PlaygroundPage = () => {
     };
   }, []);
 
-  const pushBackendEvent = (event: BackendEventRow) => {
-    setBackendEvents((current) => [event, ...current].slice(0, 6));
+  const pushBackendEvent = (event: Omit<BackendEventRow, "timestamp">) => {
+    setBackendEvents((current) => [
+      {
+        ...event,
+        timestamp: new Intl.DateTimeFormat("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }).format(new Date()),
+      },
+      ...current,
+    ]);
   };
 
   const openAudioSocket = (startRecorderOnOpen: boolean) => {
@@ -578,7 +590,7 @@ const PlaygroundPage = () => {
                 </p>
               </div>
             </div>
-            <div className="mt-3 grid gap-2">
+            <div className="mt-3 grid max-h-80 gap-2 overflow-y-auto pr-1">
               {backendEvents.length > 0 ? (
                 backendEvents.map((event, index) => (
                   <div
@@ -593,10 +605,15 @@ const PlaygroundPage = () => {
                             : "rounded-xl border border-white/10 bg-white/[0.025] p-3 text-xs text-shield-muted"
                     }
                   >
-                    <span className="mr-2 font-semibold text-white">
-                      {event.label}
-                    </span>
-                    {event.detail}
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="font-mono text-[11px] text-shield-muted">
+                        {event.timestamp}
+                      </span>
+                      <span className="font-semibold text-white">
+                        {event.label}
+                      </span>
+                      <span>{event.detail}</span>
+                    </div>
                   </div>
                 ))
               ) : (
