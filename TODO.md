@@ -8,9 +8,9 @@
 | 사람 | 핵심 영역 | 주요 모듈 |
 |---|---|---|
 | **Eunjin (@foura1201)** | Backend core | `server.py`, `buffer/manager.py`, `guard/classifier.py`, `protocol.py`, `gemini.py` |
-| **Gihwang** | Frontend + parallel pipeline | `frontend/src/**`, `buffer/response_buffer.py` (parallel), 다이어그램 / mockup |
-| **Dohoon (@DoHoonKim)** | Guard tiered cascade + eval | `guard/rules.py`, `guard/normalizer.py`, `guard/llm_judge.py`, `policy.py`, `eval/runner.py`, attackset 확장 |
-| **Soowon (@soowonj)** | Comparison + per-entity + receipt | `config/policy.*.yaml` (entity 정책), `receipt.py`, `metrics.py`, eval 분석 |
+| **Gihwang (@hangole1999)** | Frontend + parallel pipeline | `frontend/src/**`, `buffer/response_buffer.py` (parallel), 다이어그램 / mockup |
+| **Dohoon (@DoHoonKim8)** | Guard tiered cascade + eval | `guard/rules.py`, `guard/normalizer.py`, `guard/llm_judge.py`, `policy.py`, `eval/runner.py`, attackset 확장 |
+| **Soowon (@swjng)** | Comparison + per-entity + receipt | `config/policy.*.yaml` (entity 정책), `receipt.py`, `metrics.py`, eval 분석 |
 
 ---
 

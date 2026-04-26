@@ -1,7 +1,7 @@
 # Policy Bouncer -- Tiered, customizable text audit gate for voice LLM input
 
 - **Track**: AI Safety & Security
-- **Author**: 김도훈 (@DoHoonKim)
+- **Author**: 김도훈 (@DoHoonKim8)
 - **Status**: proposed
 - **Pitch** (한 문장, 영어): A tiered policy-audit gate that sits between STT and a realtime voice LLM (Gemini Live), filtering user input with a cheap rule pass, a pretrained injection classifier, and an optional small-LLM judge bound to a user-supplied policy file.
 - **Threat axis**: E (primary), A

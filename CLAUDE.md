@@ -16,9 +16,9 @@ plan.
 | Owner | Area |
 |---|---|
 | Eunjin (@foura1201) | `server.py`, `gemini.py`, `protocol.py`, `session.py`, `buffer/manager.py`, `guard/classifier.py` |
-| Gihwang | `frontend/**`, `buffer/response_buffer.py` |
+| Gihwang (@hangole1999) | `frontend/**`, `buffer/response_buffer.py` |
 | Dohoon (@DoHoonKim8) | `guard/rules.py`, `guard/normalizer.py`, `guard/llm_judge.py`, `guard/engine.py`, `eval/` (with Soowon), attackset |
-| Soowon (@soowonj) | `policy.py`, `config/policy.*.yaml`, `metrics.py`, `receipt.py`, `eval/runner.py`, `eval/compare.py`, `docs/eval-analysis.md`, `docs/limitations.md` |
+| Soowon (@swjng) | `policy.py`, `config/policy.*.yaml`, `metrics.py`, `receipt.py`, `eval/runner.py`, `eval/compare.py`, `docs/eval-analysis.md`, `docs/limitations.md` |
 
 When editing files outside your owner's area, prefer raising it in PR
 description or asking before refactoring shared interfaces.

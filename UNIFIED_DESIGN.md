@@ -4,9 +4,9 @@
 >
 > 기여:
 > - **Eunjin (@foura1201)** — `stream-shield-eunjin.md`: Hold→Scan→Release, rolling buffer + overlap tail, Prompt Guard 2 86M, attackset.yaml, code skeletons.
-> - **Gihwang** — `design-gihwang/`: parallel pipeline (Gemini ↔ classifier 동시), response buffer, frontend mockups (page-home, page-dashboard).
+> - **Gihwang (@hangole1999)** — `design-gihwang/`: parallel pipeline (Gemini ↔ classifier 동시), response buffer, frontend mockups (page-home, page-dashboard).
 > - **Dohoon (@DoHoonKim8)** — `safety-stream-shield-dohoon.md`: 3-tier cascade (L0 rules → L1 classifier → L2 LLM judge), policy-as-config YAML, sliding context window.
-> - **Soowon (@soowonj)** — `safety-stream-shield-soowon.md`: 5-decision engine (ALLOW/AUGMENT/HOLD/QUARANTINE/BLOCK), Ed25519 signed receipts, per-entity customization, vs vanilla Gemini comparison, dev-time attack-discovery harness.
+> - **Soowon (@swjng)** — `safety-stream-shield-soowon.md`: 5-decision engine (ALLOW/AUGMENT/HOLD/QUARANTINE/BLOCK), Ed25519 signed receipts, per-entity customization, vs vanilla Gemini comparison, dev-time attack-discovery harness.
 
 ---
 

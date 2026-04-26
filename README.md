@@ -77,9 +77,9 @@ pnpm dev
 ## Contributors
 
 - Eunjin (@foura1201) — design + classifier + buffer
-- Gihwang — frontend mockups + parallel pipeline + diagrams
+- Gihwang (@hangole1999) — frontend mockups + parallel pipeline + diagrams
 - Dohoon (@DoHoonKim8) — tiered cascade + policy-as-config
-- Soowon (@soowonj) — receipts + per-entity customization + comparison
+- Soowon (@swjng) — receipts + per-entity customization + comparison
 
 ## License
 
