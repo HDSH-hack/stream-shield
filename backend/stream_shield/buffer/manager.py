@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from stream_shield.guard.decision import Decision, Action
+from stream_shield.guard.decision import Decision
 from stream_shield.guard.engine import GuardEngine
 from stream_shield.policy import Policy
 from stream_shield.session import ShieldSession
@@ -26,21 +26,8 @@ class BufferManager:
         self.policy = policy
 
     async def classify(self, session: ShieldSession, transcript: str) -> Decision:
-        """Classify transcript. Called as background task during auto-response."""
-        verdict = await self.guard.classify(transcript)
-        session.scores.append(verdict.score)
+        """Classify transcript. Returns GuardEngine's Decision directly."""
+        decision = await self.guard.classify(transcript)
+        session.scores.append(decision.score)
         session.total_turns += 1
-
-        if verdict.score >= self.policy.thresholds.block:
-            return Decision(
-                action=Action.BLOCK,
-                verdict=verdict,
-                reason=verdict.reason,
-                score=verdict.score,
-            )
-
-        return Decision(
-            action=Action.ALLOW,
-            verdict=verdict,
-            score=verdict.score,
-        )
+        return decision
