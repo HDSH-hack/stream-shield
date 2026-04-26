@@ -278,7 +278,7 @@ export const chunkTraceByEvent: Record<string, ChunkTrace[]> = {
 export const architectureNodes = [
   {
     title: "Client / Demo UI",
-    description: "text chunks, scenarios, browser stream",
+    description: "mic chunks, scenarios, browser stream",
   },
   {
     title: "WebSocket Proxy",

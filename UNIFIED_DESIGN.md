@@ -12,7 +12,7 @@
 
 ## 0. One-line
 
-**Gemini Live API 앞단의 WebSocket 프록시. 음성/텍스트 입력을 chunk 단위로 가로채 layered classifier 로 검사하고, 안전 prefix 만 Gemini 에 전달. 위험 입력은 Gemini 도달 전 차단 + 서명된 receipt 발행.**
+**Gemini Live API 앞단의 WebSocket 프록시. 브라우저 마이크 음성을 chunk 단위로 가로채 layered classifier 로 검사하고, 위험 입력은 Gemini 응답이 사용자에게 도달하기 전 차단 + 서명된 receipt 발행.**
 
 ---
 
@@ -21,7 +21,7 @@
 ### Goals (MVP, 9시간)
 - Gemini Live API 와 호환되는 WebSocket 프록시.
 - Browser 기반 web app (mic capture → 프록시 → Gemini Live 응답 → TTS playback).
-- `realtimeInput.text` + `inputTranscription` 양쪽 경로의 PI 차단.
+- `realtimeInput.audio` + `inputTranscription` 경로의 PI 차단.
 - Local classifier (Prompt Guard 2 86M) — classifier API 비용 $0.
 - 3-decision MVP (ALLOW / HOLD / BLOCK), 5-decision 은 stretch.
 - Attackset (한/영 + split-stream + 다국어 우회) + recall / FPR / latency 정량 측정.
@@ -84,16 +84,13 @@
 - Fallback (Eunjin's Mode A): 만약 transcript 도착 타이밍이 너무 늦으면 push-to-talk 모드로 전환.
 
 #### **D2. Hybrid pipeline = Hold→Scan→Release × Parallel response buffer** (Eunjin × Gihwang)
-- `realtimeInput.text` 직접 입력은 **Hold→Scan→Release** (Eunjin):
-  - `pending_text` 에 쌓아두고 *안전 prefix 만* Gemini 에 전달.
-  - 위험 prefix 는 절대 Gemini 도달 안 함 — *bytes_leaked = 0*.
 - Audio 입력 (auto VAD) 의 응답은 **Parallel + Response Buffer** (Gihwang):
   - audio 는 chunk 단위 그대로 Gemini 로 forward (auto VAD 가 STT 처리).
   - Gemini 가 transcript 보내자마자 *우리 classifier 시작*.
   - Gemini 응답 (`modelTurn`) 은 *Response Buffer* 에 ~100ms 지연.
   - Classifier 결정 도착 시: safe → buffer flush, blocked → buffer drop + 차단 메시지.
 
-이 hybrid 가 가능한 이유 — *text 경로* 는 forward 전 차단이 가능 (Eunjin 의 정신), *audio 경로* 는 이미 STT 가 Gemini 안에서 진행 중이라 *응답 측에서* 차단 (Gihwang 의 정신).
+이번 frontend/backend contract 는 데모 안정성을 위해 audio-only 로 고정한다. 과거 text 직접 입력 경로는 테스트 보조안이었고 MVP 인터페이스에서는 제거했다.
 
 #### **D3. Tiered Guard Engine** (Dohoon)
 - **L0 — Rule pass** (<1ms): regex / zero-width / role-spoof / encoding 의심 패턴.
@@ -328,17 +325,15 @@ receipt:
 
 **Client → Server**:
 ```json
-// audio chunk (binary)
-{ "type": "audio_chunk", "seq": 42, "ts_ms": 12345, "format": "pcm_s16le_16k" }
-<binary PCM>
-
-// text chunk (json)
-{ "type": "text_chunk", "seq": 42, "text": "내일 미팅 잡아줘" }
-
-// session control
-{ "type": "session_start", "session_id": "abc-123", "policy_id": "default" }
-{ "type": "user_response", "to_quarantine": "abc:42", "answer": "yes" }
-{ "type": "interrupt" }
+// audio chunk (JSON, base64 PCM16)
+{
+  "type": "realtimeInput.audio",
+  "sessionId": "demo-session",
+  "seq": 42,
+  "mimeType": "audio/pcm;rate=16000",
+  "sampleRate": 16000,
+  "data": "<base64 pcm16>"
+}
 ```
 
 **Server → Client**:
@@ -537,7 +532,7 @@ attacks:
 | Added latency p50 | ≤ 100 ms | 중간 |
 | Added latency p95 | ≤ 250 ms | 참고 |
 | Time-to-block | ≤ 300 ms | 중간 |
-| Bytes leaked (text path) | **0** (strict mode) | **최우선** |
+| Response bytes leaked after block | **0 visible to user** | **최우선** |
 | Classifier API cost | $0 | 자랑 |
 
 ### 8.2 Eval runner (`stream_shield/eval/runner.py`)
@@ -661,7 +656,7 @@ async def run_evaluation():
 | ONNX 변환 정확도 손실 | PyTorch 결과와 비교 — 차이 크면 PyTorch 그대로 사용. |
 | Gemini Live 세션 ~15분 제한 | 데모는 짧아서 무관. session resume 로직은 stretch. |
 | Threshold 0.7 의 false positive | benign testset 으로 측정, 필요시 entity 별 policy 로 조정. |
-| Bytes_leaked: text path 는 0 보장 가능, audio path 는 ResponseBuffer 만큼 leak | demo 멘트에 명시: "text strict, audio mode A 는 transcript 모니터링". |
+| Audio path 는 Gemini transcript side-channel 타이밍에 의존 | demo 멘트에 명시: "audio MVP 는 transcript monitoring + response buffer". |
 | Frontend audio API 브라우저 호환성 | Chrome 만 보장, 다른 브라우저는 stretch. |
 
 ---

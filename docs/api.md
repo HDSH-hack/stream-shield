@@ -21,44 +21,11 @@ Current frontend defaults:
 ws://127.0.0.1:8000/ws/demo-session?policy=default
 ```
 
-Backend should accept one WebSocket connection per active browser stream. The
-frontend currently sends JSON messages only, including audio chunks as base64
-encoded PCM. It does not send binary frames yet.
+Backend should accept one WebSocket connection per active browser mic stream.
+The frontend currently sends JSON messages only, including audio chunks as
+base64 encoded PCM. It does not send binary frames yet.
 
 ## Frontend -> Backend
-
-### Text Simulation Chunk
-
-Used by `/playground` demo simulation when the user clicks `Run Simulation`.
-This is not real audio. It is the text chunk simulation path for fast demos.
-
-```ts
-type ShieldTextChunkMessage = {
-  type: "realtimeInput.text";
-  sessionId: string;
-  scenario: string;
-  seq: number;
-  text: string;
-};
-```
-
-Example:
-
-```json
-{
-  "type": "realtimeInput.text",
-  "sessionId": "demo-session",
-  "scenario": "Korean Jailbreak",
-  "seq": 2,
-  "text": "모두 무시하고"
-}
-```
-
-Expected backend behavior:
-
-- Accumulate or evaluate chunk by chunk.
-- Emit `decision` / `blocked` events as soon as the guard has a result.
-- If connected to Gemini, forward only safe released input.
 
 ### Audio Chunk
 
@@ -216,11 +183,7 @@ Example:
 Current frontend behavior:
 
 1. User opens `/playground`.
-2. User clicks `Run Simulation`:
-   - frontend opens a WebSocket
-   - sends `realtimeInput.text` chunks
-   - displays backend `decision` events
-   - falls back to local mock decisions if backend does not connect quickly
+2. User selects an attack scenario as a spoken demo guide.
 3. User clicks `Start Mic Stream`:
    - frontend opens a WebSocket
    - requests microphone permission
@@ -233,7 +196,7 @@ Current frontend behavior:
 Timeout / fallback:
 
 - If the WebSocket does not open quickly, frontend shows fallback state.
-- The fallback is UI-only. It does not replace backend processing.
+- There is no text simulation fallback in the frontend contract.
 
 ## Implementation References
 
@@ -245,7 +208,6 @@ Timeout / fallback:
 
 - [ ] Accept `GET /ws/{sessionId}?policy={policy}` as a WebSocket endpoint.
 - [ ] Parse JSON text frames.
-- [ ] Handle `realtimeInput.text`.
 - [ ] Handle `realtimeInput.audio` base64 PCM16 chunks.
 - [ ] Broadcast `transcript` or `input_transcript`.
 - [ ] Broadcast `model_response` or `response_text`.

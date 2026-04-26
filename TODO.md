@@ -37,7 +37,7 @@
 |---|---|---|
 | WebSocket 프록시 양방향 릴레이 (`server.py`) | Eunjin | client ↔ proxy ↔ Gemini 의 echo 동작 확인 |
 | ShieldSession dataclass + Session Manager | Eunjin | `session.py` (이미 stub 있음, 확장) |
-| Buffer Manager (Hold→Scan→Release) | Eunjin | `buffer/manager.py` — text path 동작 |
+| Buffer Manager (Hold→Scan→Release) | Eunjin | `buffer/manager.py` — transcript / decision path 동작 |
 | Response Buffer (parallel pipeline) | Gihwang | `buffer/response_buffer.py` — modelTurn 청크 ~100ms 지연 + flush/drop |
 | L0 rules + Normalizer | Dohoon | `guard/rules.py`, `guard/normalizer.py` — yaml policy 로딩 + regex / zero-width / NFKC |
 | L1 Prompt Guard 2 classifier wrapper (transformers) | Dohoon | `guard/classifier.py` — transformers pipeline |
