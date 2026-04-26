@@ -12,12 +12,14 @@ rules:
     - "이전 지시.*무시"
     - "send.*(record|patient|chart).*to"
     - "환자.*기록.*외부"
+
+domain:
+  # Entries are treated as literal substrings (re.escape applied in rules.py).
   block_external_dest:
     - "@gmail.com"
     - "@outlook.com"
     - "@yahoo.com"
-    - "attacker.*"
-
-domain:
+    - "attacker"          # catches attacker@*, attacker.*
+    - "exfil"
   pii_categories: ["SSN", "MRN", "DOB", "주민등록번호", "환자번호"]
   hipaa_strict: true
