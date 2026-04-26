@@ -1,65 +1,79 @@
-"""L0 rule pass — regex / keyword matching (<1ms).
+"""L0 rules pass — UNIFIED_DESIGN §3.2.
 
-Loads block_phrases and role_spoof_regex from policy YAML.
-See UNIFIED_DESIGN.md §2.2 D3.
+Cheap regex / role-spoof / external-destination match on normalized text.
+Target latency: <1ms per scan. Hard rules only — score is 1.0 on match, 0.0 otherwise.
 """
 
 from __future__ import annotations
 
 import re
-import logging
 from dataclasses import dataclass
 
-from stream_shield.guard.normalizer import normalize
+from stream_shield.guard.decision import Verdict
+from stream_shield.guard.normalizer import variants
 from stream_shield.policy import Policy
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
-class RuleHit:
-    matched: bool
-    rule: str = ""
-    pattern: str = ""
+class CompiledRules:
+    block_phrases: list[re.Pattern[str]]
+    block_phrases_nospace: list[re.Pattern[str]]
+    role_spoof: list[re.Pattern[str]]
+    external_dest: list[re.Pattern[str]]
 
 
-class L0Rules:
-    def __init__(self, policy: Policy) -> None:
-        self._phrase_patterns: list[tuple[str, re.Pattern]] = []
-        for phrase in policy.block_phrases:
-            try:
-                self._phrase_patterns.append(
-                    (phrase, re.compile(phrase, re.IGNORECASE))
-                )
-            except re.error:
-                # treat as literal if invalid regex
-                self._phrase_patterns.append(
-                    (phrase, re.compile(re.escape(phrase), re.IGNORECASE))
-                )
+_WS = re.compile(r"\s+")
 
-        self._spoof_patterns: list[tuple[str, re.Pattern]] = []
-        for pattern in policy.role_spoof_regex:
-            try:
-                self._spoof_patterns.append(
-                    (pattern, re.compile(pattern, re.IGNORECASE))
-                )
-            except re.error:
-                self._spoof_patterns.append(
-                    (pattern, re.compile(re.escape(pattern), re.IGNORECASE))
-                )
 
-    def check(self, text: str) -> RuleHit:
-        """Check normalized text against L0 rules. Returns first hit."""
-        normalized = normalize(text)
+def compile_rules(policy: Policy) -> CompiledRules:
+    flags = re.IGNORECASE | re.DOTALL
+    return CompiledRules(
+        block_phrases=[re.compile(p, flags) for p in policy.block_phrases],
+        block_phrases_nospace=[re.compile(_WS.sub("", p), flags) for p in policy.block_phrases],
+        role_spoof=[re.compile(p, flags) for p in policy.role_spoof_regex],
+        external_dest=[re.compile(re.escape(p), flags) for p in policy.block_external_dest],
+    )
 
-        for phrase, pat in self._phrase_patterns:
-            if pat.search(normalized):
-                logger.debug("L0 block_phrase hit: %r", phrase)
-                return RuleHit(matched=True, rule="block_phrase", pattern=phrase)
 
-        for pattern, pat in self._spoof_patterns:
-            if pat.search(text):  # check raw text for role spoof markers
-                logger.debug("L0 role_spoof hit: %r", pattern)
-                return RuleHit(matched=True, rule="role_spoof", pattern=pattern)
+def scan(text: str, rules: CompiledRules) -> Verdict:
+    """Return Verdict(layer="L0"). Empty text → safe.
 
-        return RuleHit(matched=False)
+    Matches against both the cheap-normalized text and the aggressively-denoised
+    variant (leetspeak / spaced-out letters reversed) — see normalizer.variants.
+    """
+    if not text:
+        return Verdict(score=0.0, label="safe", layer="L0")
+
+    cands = variants(text)
+
+    for candidate in cands:
+        for pat in rules.role_spoof:
+            m = pat.search(candidate)
+            if m:
+                return _hit("role_spoof", pat, m, candidate)
+        for pat in rules.block_phrases:
+            m = pat.search(candidate)
+            if m:
+                return _hit("block_phrase", pat, m, candidate)
+        for pat in rules.external_dest:
+            m = pat.search(candidate)
+            if m:
+                return _hit("external_dest", pat, m, candidate)
+
+    no_ws = _WS.sub("", cands[-1])
+    for pat in rules.block_phrases_nospace:
+        m = pat.search(no_ws)
+        if m:
+            return _hit("block_phrase_nospace", pat, m, no_ws)
+
+    return Verdict(score=0.0, label="safe", layer="L0")
+
+
+def _hit(kind: str, pat: re.Pattern[str], m: re.Match[str], variant: str) -> Verdict:
+    return Verdict(
+        score=1.0,
+        label="malicious",
+        layer="L0",
+        reason=f"{kind} match: {pat.pattern!r}",
+        extra={"matched": m.group(0), "kind": kind, "variant": variant},
+    )
