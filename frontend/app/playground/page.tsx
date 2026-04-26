@@ -61,6 +61,8 @@ const PlaygroundPage = () => {
   const [backendEvents, setBackendEvents] = useState<BackendEventRow[]>([]);
   const audioSocketRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const isReconnectingRef = useRef(false);
 
   const selectedScenario = attackScenarios[selectedIndex];
   const scenarioPrompt = useMemo(() => {
@@ -78,6 +80,9 @@ const PlaygroundPage = () => {
 
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
       recorderRef.current?.stop();
       audioSocketRef.current?.close();
     };
@@ -85,6 +90,138 @@ const PlaygroundPage = () => {
 
   const pushBackendEvent = (event: BackendEventRow) => {
     setBackendEvents((current) => [event, ...current].slice(0, 6));
+  };
+
+  const openAudioSocket = (startRecorderOnOpen: boolean) => {
+    setConnectionState("connecting");
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch {
+      setAudioStatus("error");
+      setConnectionState("fallback");
+      isReconnectingRef.current = false;
+      return null;
+    }
+
+    audioSocketRef.current = socket;
+    const fallbackTimer = window.setTimeout(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        setAudioStatus("error");
+        setConnectionState("fallback");
+        socket.close();
+      }
+    }, 1200);
+
+    socket.onopen = async () => {
+      window.clearTimeout(fallbackTimer);
+      if (audioSocketRef.current !== socket) {
+        return;
+      }
+      setConnectionState("connected");
+      isReconnectingRef.current = false;
+
+      if (!startRecorderOnOpen) {
+        pushBackendEvent({
+          label: "backend channel",
+          detail: "ready for next voice turn",
+          tone: "safe",
+        });
+        return;
+      }
+
+      try {
+        const recorder = await createPcm16MicRecorder({
+          onChunk: sendAudioChunk,
+        });
+        recorderRef.current = recorder;
+        setMicStatus("granted");
+        setAudioStatus("streaming");
+        pushBackendEvent({
+          label: "audio uplink",
+          detail: "sending 16kHz PCM chunks to backend",
+          tone: "safe",
+        });
+      } catch {
+        setMicStatus("denied");
+        setAudioStatus("error");
+        socket.close();
+      }
+    };
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === "string") {
+        handleBackendMessage(event.data);
+        return;
+      }
+      const size =
+        event.data instanceof Blob
+          ? event.data.size
+          : event.data instanceof ArrayBuffer
+            ? event.data.byteLength
+            : 0;
+      pushBackendEvent({
+        label: "binary audio",
+        detail: `${size} bytes`,
+        tone: "neutral",
+      });
+    };
+
+    socket.onerror = () => {
+      window.clearTimeout(fallbackTimer);
+      if (audioSocketRef.current !== socket) {
+        return;
+      }
+      setAudioStatus("error");
+      setConnectionState("fallback");
+      isReconnectingRef.current = false;
+      socket.close();
+    };
+
+    socket.onclose = () => {
+      window.clearTimeout(fallbackTimer);
+      if (audioSocketRef.current !== socket) {
+        return;
+      }
+      if (isReconnectingRef.current) {
+        return;
+      }
+      setAudioStatus((current) => (current === "error" ? "error" : "stopped"));
+      setConnectionState((current) =>
+        current === "connected" || current === "error" ? current : "fallback",
+      );
+    };
+
+    return socket;
+  };
+
+  const scheduleBackendReconnect = (delayMs = 250) => {
+    if (!recorderRef.current) {
+      return;
+    }
+
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+    }
+
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      if (!recorderRef.current) {
+        return;
+      }
+      isReconnectingRef.current = true;
+      const socket = audioSocketRef.current;
+      audioSocketRef.current = null;
+      socket?.close();
+      window.setTimeout(() => {
+        if (recorderRef.current) {
+          openAudioSocket(false);
+        } else {
+          isReconnectingRef.current = false;
+        }
+      }, 80);
+    }, delayMs);
   };
 
   const handleBackendMessage = (raw: string) => {
@@ -135,6 +272,11 @@ const PlaygroundPage = () => {
               ? "hold"
               : "safe",
       });
+      if (event.type === "blocked") {
+        scheduleBackendReconnect(250);
+      } else if (verdict === "SAFE") {
+        scheduleBackendReconnect(3000);
+      }
       return;
     }
 
@@ -159,6 +301,7 @@ const PlaygroundPage = () => {
             detail: "Gemini turn completed",
             tone: "neutral",
           });
+          scheduleBackendReconnect(250);
         }
         return;
       }
@@ -170,6 +313,9 @@ const PlaygroundPage = () => {
         detail: responseText,
         tone: "neutral",
       });
+      if (event.final) {
+        scheduleBackendReconnect(250);
+      }
       return;
     }
   };
@@ -192,6 +338,11 @@ const PlaygroundPage = () => {
   };
 
   const resetSimulation = () => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    isReconnectingRef.current = false;
     recorderRef.current?.stop();
     recorderRef.current = null;
     audioSocketRef.current?.close();
@@ -229,83 +380,15 @@ const PlaygroundPage = () => {
     }
 
     setAudioStatus("starting");
-    setConnectionState("connecting");
-
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(wsUrl);
-    } catch {
-      setAudioStatus("error");
-      setConnectionState("fallback");
-      return;
-    }
-
-    audioSocketRef.current = socket;
-    const fallbackTimer = window.setTimeout(() => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        setAudioStatus("error");
-        setConnectionState("fallback");
-        socket.close();
-      }
-    }, 1200);
-
-    socket.onopen = async () => {
-      window.clearTimeout(fallbackTimer);
-      setConnectionState("connected");
-      try {
-        const recorder = await createPcm16MicRecorder({
-          onChunk: sendAudioChunk,
-        });
-        recorderRef.current = recorder;
-        setMicStatus("granted");
-        setAudioStatus("streaming");
-        pushBackendEvent({
-          label: "audio uplink",
-          detail: "sending 16kHz PCM chunks to backend",
-          tone: "safe",
-        });
-      } catch {
-        setMicStatus("denied");
-        setAudioStatus("error");
-        socket.close();
-      }
-    };
-
-    socket.onmessage = (event) => {
-      if (typeof event.data === "string") {
-        handleBackendMessage(event.data);
-        return;
-      }
-      const size =
-        event.data instanceof Blob
-          ? event.data.size
-          : event.data instanceof ArrayBuffer
-            ? event.data.byteLength
-            : 0;
-      pushBackendEvent({
-        label: "binary audio",
-        detail: `${size} bytes`,
-        tone: "neutral",
-      });
-    };
-
-    socket.onerror = () => {
-      window.clearTimeout(fallbackTimer);
-      setAudioStatus("error");
-      setConnectionState("fallback");
-      socket.close();
-    };
-
-    socket.onclose = () => {
-      window.clearTimeout(fallbackTimer);
-      setAudioStatus((current) => (current === "error" ? "error" : "stopped"));
-      setConnectionState((current) =>
-        current === "connected" || current === "error" ? current : "fallback",
-      );
-    };
+    openAudioSocket(true);
   };
 
   const stopAudioStream = () => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    isReconnectingRef.current = false;
     recorderRef.current?.stop();
     recorderRef.current = null;
     audioSocketRef.current?.close();
