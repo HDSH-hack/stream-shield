@@ -145,7 +145,7 @@ export const simulationControls: ControlItem[] = [
   { label: "Chunk interval", value: "150ms" },
   { label: "Min buffer", value: "48 chars" },
   { label: "Overlap tail", value: "128 chars" },
-  { label: "Model", value: "Prompt Guard 2 86M" },
+  { label: "Model", value: "ProtectAI DeBERTa v3" },
 ];
 
 export const splitStreamChunks = [
